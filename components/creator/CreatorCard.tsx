@@ -2,28 +2,31 @@
 
 import { Creator } from "@/types/creator";
 import Waveform from "@/components/audio/Waveform";
+import { useRouter } from "next/navigation";
+
 
 export default function CreatorCard({
   creator,
 }: {
   creator: Creator;
 }) {
+  const router = useRouter();
   function handlePreview() {
-    if (creator.intro_audio) {
-      const audio = new Audio(creator.intro_audio);
-      audio.play();
-      return;
-    }
-
-    alert("Preview audio will be added soon.");
+    const audio = new Audio(creator.intro_audio || "/mock-voice.mp3");
+    audio.play();
   }
-
+  function openProfile() {
+    router.push(`/creator/${creator.username}`);
+  }
   function handleStartChat() {
-    alert(`Starting chat with ${creator.display_name} soon.`);
+    router.push(`/chat/${creator.username}`);
   }
 
   return (
-    <div className="bg-zinc-900 rounded-3xl overflow-hidden border border-zinc-800 shadow-2xl">
+    <div
+      onClick={openProfile}
+      className="bg-zinc-900 rounded-3xl overflow-hidden border border-zinc-800 shadow-2xl cursor-pointer"
+    >
       <div className="relative h-44 bg-gradient-to-br from-purple-900/60 via-zinc-800 to-black flex items-center justify-center">
         {creator.banner_image && (
           <img
@@ -46,59 +49,55 @@ export default function CreatorCard({
         </div>
       </div>
 
-      <div className="p-5">
-        <div className="flex items-start justify-between gap-4 mb-3">
-          <div>
-            <h2 className="text-2xl font-bold">
-              {creator.display_name}
-            </h2>
+      <div>
+        <h2 className="text-2xl font-bold">
+          {creator.display_name}
+        </h2>
 
-            <p className="text-zinc-400 text-sm mt-1">
-              {creator.bio}
-            </p>
-          </div>
-        </div>
+        <p className="text-zinc-500 text-sm mt-1">
+          @{creator.username}
+        </p>
 
-        <div className="flex flex-wrap gap-2 mb-5">
-          {creator.tags?.map((tag) => (
-            <span
-              key={tag}
-              className="bg-zinc-800 px-3 py-1 rounded-full text-xs text-zinc-300"
-            >
-              #{tag}
-            </span>
-          ))}
-        </div>
-
-        <div className="bg-black/40 border border-zinc-800 rounded-2xl p-4 mb-4 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">
-              Voice preview
-            </p>
-            <p className="text-xs text-zinc-500">
-              Listen before starting
-            </p>
-          </div>
-
-          <Waveform />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={handlePreview}
-            className="rounded-2xl bg-zinc-800 py-3 text-sm font-semibold hover:bg-zinc-700 transition"
-          >
-            ▶ Preview
-          </button>
-
-          <button
-            onClick={handleStartChat}
-            className="rounded-2xl bg-white text-black py-3 text-sm font-semibold hover:bg-zinc-200 transition"
-          >
-            Start chat
-          </button>
-        </div>
+        <p className="text-zinc-300 text-sm mt-3">
+          {creator.tagline || creator.bio}
+        </p>
       </div>
-    </div>
+
+
+      <div className="bg-black/40 border border-zinc-800 rounded-2xl p-4 mb-4 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium">
+            Voice preview
+          </p>
+          <p className="text-xs text-zinc-500">
+            Listen before starting
+          </p>
+        </div>
+
+        <Waveform />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handlePreview();
+          }}
+          className="rounded-2xl bg-zinc-800 py-3 text-sm font-semibold hover:bg-zinc-700 transition"
+        >
+          ▶ Preview
+        </button>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleStartChat();
+          }}
+          className="rounded-2xl bg-white text-black py-3 text-sm font-semibold hover:bg-zinc-200 transition"
+        >
+          Start chat
+        </button>
+      </div>
+     </div>
   );
 }
