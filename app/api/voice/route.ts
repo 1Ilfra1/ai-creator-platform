@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { ElevenLabsClient } from "elevenlabs";
 
-const elevenlabs = new ElevenLabsClient({
-  apiKey: process.env.ELEVENLABS_API_KEY,
-});
 
 export async function POST(request: Request) {
 
@@ -34,7 +31,18 @@ export async function POST(request: Request) {
         mock: true,
       });
     }
+    const apiKey = process.env.ELEVENLABS_API_KEY;
 
+    if (!apiKey) {
+      return NextResponse.json({
+        audioUrl: "/mock-voice.mp3",
+        mock: true,
+      });
+    }
+
+    const elevenlabs = new ElevenLabsClient({
+      apiKey,
+    });
     const audio = await elevenlabs.textToSpeech.convert(
       voiceId,
       {
