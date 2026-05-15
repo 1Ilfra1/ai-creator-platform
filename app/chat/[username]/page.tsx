@@ -20,6 +20,7 @@ interface Creator {
     display_name: string;
     tagline: string | null;
     profile_image: string | null;
+    personality_prompt: string | null;
 }
 
 export default function ChatPage({
@@ -51,7 +52,7 @@ export default function ChatPage({
 
             const { data: creatorData, error: creatorError } = await supabase
                 .from("creators")
-                .select("id, username, display_name, tagline, profile_image")
+                .select("id, username, display_name, tagline, profile_image, personality_prompt")
                 .eq("username", username)
                 .single();
 
@@ -156,6 +157,7 @@ export default function ChatPage({
                     message: text,
                     creatorName: creator.display_name,
                     creatorTagline: creator.tagline,
+                    creatorStyle: creator.personality_prompt,
                 }),
             });
 
@@ -173,6 +175,9 @@ export default function ChatPage({
             });
 
             const voiceData = await voiceResponse.json();
+            const audioUrl = voiceData.audio
+                ? `data:${voiceData.mimeType};base64,${voiceData.audio}`
+                : voiceData.audioUrl;
 
             const { data: savedAiMessage } = await supabase
                 .from("messages")
@@ -180,7 +185,7 @@ export default function ChatPage({
                     conversation_id: conversationId,
                     sender_type: "ai",
                     text: aiText,
-                    audio_url: voiceData.audioUrl,
+                    audio_url: audioUrl,
                 })
                 .select()
                 .single();
@@ -206,7 +211,7 @@ export default function ChatPage({
             <header className="sticky top-0 z-10 border-b border-zinc-800 bg-black/90 backdrop-blur p-4">
                 <div className="flex items-center gap-3">
                     <button
-                        onClick={() => router.push(`/creator/${creator.username}`)}
+                        onClick={() => router.push("/chats")}
                         className="text-zinc-400"
                     >
                         ←
@@ -250,8 +255,8 @@ export default function ChatPage({
                     >
                         <div
                             className={`max-w-[82%] rounded-3xl px-4 py-3 text-sm leading-relaxed ${message.sender_type === "user"
-                                    ? "bg-white text-black rounded-br-md"
-                                    : "bg-zinc-900 text-white rounded-bl-md border border-zinc-800"
+                                ? "bg-white text-black rounded-br-md"
+                                : "bg-zinc-900 text-white rounded-bl-md border border-zinc-800"
                                 }`}
                         >
                             <p>{message.text}</p>

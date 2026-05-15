@@ -6,10 +6,10 @@ export default function BottomNav() {
   const router = useRouter();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 h-16 bg-zinc-950 border-t border-zinc-800 flex items-center justify-around text-sm text-zinc-400">
+    <nav className="fixed bottom-0 left-0 right-0 h-20 bg-zinc-950 border-t border-zinc-800 flex text-sm text-zinc-400 z-50">
       <button
         onClick={() => router.push("/")}
-        className="flex flex-col items-center"
+        className="w-full h-full flex-1 flex flex-col items-center justify-center gap-1"
       >
         <span>🔥</span>
         <span>Creators</span>
@@ -17,7 +17,7 @@ export default function BottomNav() {
 
       <button
         onClick={() => router.push("/chats")}
-        className="flex flex-col items-center"
+        className="w-full h-full flex-1 flex flex-col items-center justify-center gap-1"
       >
         <span>💬</span>
         <span>Chats</span>
@@ -25,7 +25,7 @@ export default function BottomNav() {
 
       <button
         onClick={() => router.push("/profile")}
-        className="flex flex-col items-center"
+        className="w-full h-full flex-1 flex flex-col items-center justify-center gap-1"
       >
         <span>👤</span>
         <span>Profile</span>
