@@ -36,6 +36,7 @@ export default function ChatPage({
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
     const [isTyping, setIsTyping] = useState(false);
+    const [showPaywall, setShowPaywall] = useState(false);
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -107,10 +108,34 @@ export default function ChatPage({
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages, isTyping]);
 
-    async function sendMessage() {
-        if (!input.trim() || !conversationId || !creator) return;
+    async function sendMessage(prefilledText?: string) {
+        const messageText =
+            typeof prefilledText === "string"
+                ? prefilledText.trim()
+                : input.trim();
 
-        const text = input.trim();
+        if (!messageText || !conversationId || !creator) return;
+        const {
+            data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+            router.push("/login");
+            return;
+        }
+
+        const { data: profile } = await supabase
+            .from("profiles")
+            .select("voice_seconds_remaining")
+            .eq("id", user.id)
+            .single();
+
+        if (!profile || profile.voice_seconds_remaining <= 0) {
+            setShowPaywall(true);
+            return;
+        }
+
+        const text = messageText;
 
         const moderationResponse = await fetch("/api/moderate", {
             method: "POST",
@@ -163,6 +188,12 @@ export default function ChatPage({
 
             const aiData = await aiResponse.json();
             const aiText = aiData.reply || "Tell me more.";
+            const wordCount = aiText.trim().split(/\s+/).length;
+
+            const estimatedSeconds = Math.min(
+                30,
+                Math.max(3, Math.ceil(wordCount / 2.5))
+            );
 
             const voiceResponse = await fetch("/api/voice", {
                 method: "POST",
@@ -194,6 +225,10 @@ export default function ChatPage({
                 setMessages((prev) => [...prev, savedAiMessage]);
             }
 
+            await supabase.rpc("decrease_voice_seconds", {
+                seconds_to_decrease: estimatedSeconds,
+            });
+
             setIsTyping(false);
         }, 900);
     }
@@ -205,6 +240,10 @@ export default function ChatPage({
             </main>
         );
     }
+
+    async function useSuggestedReply(text: string) {
+    await sendMessage(text);
+}
 
     return (
         <main className="min-h-screen bg-black text-white flex flex-col">
@@ -242,8 +281,26 @@ export default function ChatPage({
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-28">
                 {messages.length === 0 && (
-                    <div className="text-center text-zinc-500 mt-20">
-                        Start a private conversation with {creator.display_name}.
+                    <div className="text-center mt-20">
+                        <p className="text-zinc-500 mb-5">
+                            Start a private conversation with {creator.display_name}.
+                        </p>
+
+                        <div className="flex flex-col gap-3 items-center">
+                            {[
+                                "Tell me something 💜",
+                                "I missed you so much",
+                                "How are you?",
+                            ].map((reply) => (
+                                <button
+                                    key={reply}
+                                    onClick={() => useSuggestedReply(reply)}
+                                    className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-zinc-200"
+                                >
+                                    💬 {reply}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 )}
 
@@ -294,13 +351,46 @@ export default function ChatPage({
                     />
 
                     <button
-                        onClick={sendMessage}
+                        onClick={() => sendMessage()}
                         className="bg-white text-black px-5 rounded-2xl font-semibold"
                     >
                         Send
                     </button>
                 </div>
             </div>
+            {showPaywall && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur z-50 flex items-center justify-center p-6">
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 max-w-sm w-full text-center">
+                        <div className="text-4xl mb-4">💜</div>
+
+                        <h2 className="text-2xl font-bold mb-2">
+                            Your free voice time is over
+                        </h2>
+
+                        <p className="text-zinc-400 mb-6">
+                            Continue the conversation and keep listening to creator voice replies.
+                        </p>
+
+                        <button
+                            onClick={() => {
+                                router.push("/pricing");
+                            }}
+                            className="w-full bg-green-500 text-black py-4 rounded-2xl font-bold mb-3"
+                        >
+                            Continue conversation
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                setShowPaywall(false);
+                            }}
+                            className="w-full bg-zinc-800 text-white py-3 rounded-2xl font-semibold"
+                        >
+                            Maybe later
+                        </button>
+                    </div>
+                </div>
+            )}
         </main>
     );
 }
