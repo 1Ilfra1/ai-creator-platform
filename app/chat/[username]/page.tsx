@@ -13,6 +13,8 @@ interface Message {
     sender_type: "user" | "ai";
     text: string;
     audio_url?: string | null;
+    created_at?: string;
+    is_fallback?: boolean;
 }
 
 interface Creator {
@@ -23,6 +25,7 @@ interface Creator {
     profile_image: string | null;
     personality_prompt: string | null;
     intro_audio: string | null;
+    voice_id: string | null;
 }
 
 export default function ChatPage({
@@ -57,7 +60,7 @@ export default function ChatPage({
 
             const { data: creatorData, error: creatorError } = await supabase
                 .from("creators")
-                .select("id, username, display_name, tagline, profile_image, personality_prompt, intro_audio")
+                .select("id, username, display_name, tagline, profile_image, personality_prompt, intro_audio, voice_id")
                 .eq("username", username)
                 .single();
 
@@ -165,7 +168,14 @@ export default function ChatPage({
                 ? prefilledText.trim()
                 : input.trim();
 
-        if (!messageText || !conversationId || !creator) return;
+        if (
+            !messageText ||
+            !conversationId ||
+            !creator ||
+            isTyping
+        ) {
+            return;
+        }
         const {
             data: { user },
         } = await supabase.auth.getUser();
@@ -238,6 +248,7 @@ export default function ChatPage({
             });
 
             const aiData = await aiResponse.json();
+            const isFallback = aiData.fallback || false;
             const aiText = aiData.reply || "Tell me more.";
             const wordCount = aiText.trim().split(/\s+/).length;
 
@@ -246,13 +257,19 @@ export default function ChatPage({
                 Math.max(3, Math.ceil(wordCount / 2.5))
             );
 
+            const voiceText =
+                aiText.length > 500
+                    ? `${aiText.slice(0, 500)}...`
+                    : aiText;
+
             const voiceResponse = await fetch("/api/voice", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
-                    text: aiText,
+                    text: voiceText,
+                    voiceId: creator.voice_id,
                 }),
             });
 
@@ -268,6 +285,10 @@ export default function ChatPage({
                     sender_type: "ai",
                     text: aiText,
                     audio_url: audioUrl,
+                    audio_duration_seconds: estimatedSeconds,
+                    is_fallback: isFallback,
+                    voice_generated: voiceData.generated || false,
+                    voice_fallback: voiceData.fallback || false,
                 })
                 .select()
                 .single();
@@ -319,6 +340,10 @@ export default function ChatPage({
         oscillator.stop(audioContext.currentTime + 0.15);
     }
 
+    const hasUserMessages = messages.some(
+        (message) => message.sender_type === "user"
+    );
+
     return (
         <main className="min-h-screen bg-black text-white flex flex-col">
             <header className="sticky top-0 z-10 border-b border-zinc-800 bg-black/90 backdrop-blur p-4">
@@ -354,7 +379,7 @@ export default function ChatPage({
             </header>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-28">
-                {messages.length <= 1 && (
+                {!hasUserMessages && (
                     <div className="text-center mt-20">
                         <p className="text-zinc-500 mb-5">
                             Start a private conversation with {creator.display_name}.
@@ -402,6 +427,12 @@ export default function ChatPage({
                                 }`}
                         >
                             <div>
+                                {message.is_fallback && (
+                                    <div className="text-[10px] uppercase tracking-wider text-zinc-500 mb-2">
+                                        offline mode
+                                    </div>
+                                )}
+
                                 <p className="text-sm text-zinc-300 leading-relaxed">
                                     {expandedMessages.includes(message.id)
                                         ? message.text
@@ -428,6 +459,19 @@ export default function ChatPage({
 
                             {message.audio_url && (
                                 <AudioPlayer audioUrl={message.audio_url} />
+                            )}
+                            {message.created_at && (
+                                <p
+                                    className={`text-[10px] mt-2 ${message.sender_type === "user"
+                                        ? "text-black/50"
+                                        : "text-zinc-500"
+                                        }`}
+                                >
+                                    {new Date(message.created_at).toLocaleTimeString([], {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                    })}
+                                </p>
                             )}
                         </div>
                     </motion.div>
