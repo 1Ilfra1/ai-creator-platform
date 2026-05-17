@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { buildCreatorSafetyPrompt } from "@/services/prompts";
 import AudioPlayer from "@/components/audio/AudioPlayer";
+import { motion } from "framer-motion";
 
 interface Message {
     id: string;
@@ -21,6 +22,7 @@ interface Creator {
     tagline: string | null;
     profile_image: string | null;
     personality_prompt: string | null;
+    intro_audio: string | null;
 }
 
 export default function ChatPage({
@@ -34,11 +36,13 @@ export default function ChatPage({
     const [creator, setCreator] = useState<Creator | null>(null);
     const [conversationId, setConversationId] = useState<string | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
+    const [expandedMessages, setExpandedMessages] = useState<string[]>([]);
     const [input, setInput] = useState("");
     const [isTyping, setIsTyping] = useState(false);
     const [showPaywall, setShowPaywall] = useState(false);
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
+    const inputRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
         async function setupConversation() {
@@ -53,7 +57,7 @@ export default function ChatPage({
 
             const { data: creatorData, error: creatorError } = await supabase
                 .from("creators")
-                .select("id, username, display_name, tagline, profile_image, personality_prompt")
+                .select("id, username, display_name, tagline, profile_image, personality_prompt, intro_audio")
                 .eq("username", username)
                 .single();
 
@@ -86,19 +90,66 @@ export default function ChatPage({
 
             const { data: newConversation, error } = await supabase
                 .from("conversations")
-                .insert({
-                    user_id: user.id,
-                    creator_id: creatorData.id,
-                })
+                .upsert(
+                    {
+                        user_id: user.id,
+                        creator_id: creatorData.id,
+                    },
+                    {
+                        onConflict: "user_id,creator_id",
+                        ignoreDuplicates: true,
+                    }
+                )
                 .select()
-                .single();
+                .maybeSingle();
 
             if (error) {
                 console.error(error);
                 return;
             }
 
+            if (!newConversation) {
+                const { data: existingConversation } = await supabase
+                    .from("conversations")
+                    .select("*")
+                    .eq("user_id", user.id)
+                    .eq("creator_id", creatorData.id)
+                    .single();
+
+                if (existingConversation) {
+                    setConversationId(existingConversation.id);
+                    return;
+                }
+
+                return;
+            }
+
             setConversationId(newConversation.id);
+
+            setIsTyping(true);
+
+            setTimeout(async () => {
+                const introMessage =
+                    `Hey... I'm really happy you're here 💜`;
+
+                const { data: savedIntroMessage } = await supabase
+                    .from("messages")
+                    .insert({
+                        conversation_id: newConversation.id,
+                        sender_type: "ai",
+                        text: introMessage,
+                        audio_url: creatorData.intro_audio || "/mock-voice.mp3",
+                    })
+                    .select()
+                    .single();
+
+                if (savedIntroMessage) {
+                    setMessages([savedIntroMessage]);
+                    playSoftPing();
+                }
+
+                setIsTyping(false);
+            }, 1200);
         }
 
         setupConversation();
@@ -223,6 +274,7 @@ export default function ChatPage({
 
             if (savedAiMessage) {
                 setMessages((prev) => [...prev, savedAiMessage]);
+                playSoftPing();
             }
 
             await supabase.rpc("decrease_voice_seconds", {
@@ -230,6 +282,7 @@ export default function ChatPage({
             });
 
             setIsTyping(false);
+            inputRef.current?.focus();
         }, 900);
     }
 
@@ -242,8 +295,29 @@ export default function ChatPage({
     }
 
     async function useSuggestedReply(text: string) {
-    await sendMessage(text);
-}
+        await sendMessage(text);
+    }
+
+    function playSoftPing() {
+        const audioContext = new AudioContext();
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+
+        oscillator.type = "sine";
+        oscillator.frequency.value = 620;
+
+        gain.gain.setValueAtTime(0.03, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(
+            0.001,
+            audioContext.currentTime + 0.15
+        );
+
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 0.15);
+    }
 
     return (
         <main className="min-h-screen bg-black text-white flex flex-col">
@@ -280,7 +354,7 @@ export default function ChatPage({
             </header>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-28">
-                {messages.length === 0 && (
+                {messages.length <= 1 && (
                     <div className="text-center mt-20">
                         <p className="text-zinc-500 mb-5">
                             Start a private conversation with {creator.display_name}.
@@ -305,8 +379,19 @@ export default function ChatPage({
                 )}
 
                 {messages.map((message) => (
-                    <div
+                    <motion.div
                         key={message.id}
+                        initial={{
+                            opacity: 0,
+                            y: 10,
+                        }}
+                        animate={{
+                            opacity: 1,
+                            y: 0,
+                        }}
+                        transition={{
+                            duration: 0.25,
+                        }}
                         className={`flex ${message.sender_type === "user" ? "justify-end" : "justify-start"
                             }`}
                     >
@@ -316,19 +401,44 @@ export default function ChatPage({
                                 : "bg-zinc-900 text-white rounded-bl-md border border-zinc-800"
                                 }`}
                         >
-                            <p>{message.text}</p>
+                            <div>
+                                <p className="text-sm text-zinc-300 leading-relaxed">
+                                    {expandedMessages.includes(message.id)
+                                        ? message.text
+                                        : message.text.length > 140
+                                            ? `${message.text.slice(0, 140)}...`
+                                            : message.text}
+                                </p>
+                            </div>
+
+                            {message.text.length > 140 &&
+                                !expandedMessages.includes(message.id) && (
+                                    <button
+                                        onClick={() => {
+                                            setExpandedMessages((prev) => [
+                                                ...prev,
+                                                message.id,
+                                            ]);
+                                        }}
+                                        className="text-xs text-zinc-400 mt-2 hover:text-zinc-200 transition"
+                                    >
+                                        Show more
+                                    </button>
+                                )}
 
                             {message.audio_url && (
                                 <AudioPlayer audioUrl={message.audio_url} />
                             )}
                         </div>
-                    </div>
+                    </motion.div>
                 ))}
 
                 {isTyping && (
                     <div className="flex justify-start">
-                        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl rounded-bl-md px-4 py-3 text-zinc-400 text-sm">
-                            {creator.display_name} is typing...
+                        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl rounded-bl-md px-4 py-3 flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce" />
+                            <span className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce [animation-delay:120ms]" />
+                            <span className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce [animation-delay:240ms]" />
                         </div>
                     </div>
                 )}
@@ -339,6 +449,8 @@ export default function ChatPage({
             <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-800 bg-black/95 backdrop-blur p-4">
                 <div className="flex gap-3">
                     <input
+                        disabled={isTyping}
+                        ref={inputRef}
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => {
@@ -351,8 +463,12 @@ export default function ChatPage({
                     />
 
                     <button
+                        disabled={isTyping}
                         onClick={() => sendMessage()}
-                        className="bg-white text-black px-5 rounded-2xl font-semibold"
+                        className={`px-5 rounded-2xl font-semibold transition ${isTyping
+                            ? "bg-zinc-700 text-zinc-400"
+                            : "bg-white text-black"
+                            }`}
                     >
                         Send
                     </button>

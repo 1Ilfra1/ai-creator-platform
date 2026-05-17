@@ -61,16 +61,22 @@ export default function ProfilePage() {
           </p>
 
           <div className="grid grid-cols-2 gap-3 mb-6">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col justify-center min-h-[110px]">
               <p className="text-sm text-zinc-500">Plan</p>
-              <p className="text-2xl font-bold">
-                {subscriptionStatus === "active" ? "Premium 💎" : "Free"}
+              <p className="text-2xl font-bold flex items-center gap-2 mt-2 whitespace-nowrap">
+                {subscriptionStatus === "active" ? (
+                  <>
+                    Premium <span>💎</span>
+                  </>
+                ) : (
+                  "Free"
+                )}
               </p>
             </div>
 
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col justify-center min-h-[110px]">
               <p className="text-sm text-zinc-500">Voice minutes</p>
-              <p className="text-xl font-bold">
+              <p className="text-3xl font-bold mt-2">
                 {minutes}m {remainingSeconds}s
               </p>
             </div>

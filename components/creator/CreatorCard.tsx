@@ -1,9 +1,7 @@
 "use client";
 
 import { Creator } from "@/types/creator";
-import Waveform from "@/components/audio/Waveform";
 import { useRouter } from "next/navigation";
-
 
 export default function CreatorCard({
   creator,
@@ -11,13 +9,16 @@ export default function CreatorCard({
   creator: Creator;
 }) {
   const router = useRouter();
+
   function handlePreview() {
     const audio = new Audio(creator.intro_audio || "/mock-voice.mp3");
     audio.play();
   }
+
   function openProfile() {
     router.push(`/creator/${creator.username}`);
   }
+
   function handleStartChat() {
     router.push(`/chat/${creator.username}`);
   }
@@ -49,55 +50,55 @@ export default function CreatorCard({
         </div>
       </div>
 
-      <div>
-        <h2 className="text-2xl font-bold">
-          {creator.display_name}
-        </h2>
+      <div className="p-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-2xl font-bold">
+            {creator.display_name}
+          </h2>
 
-        <p className="text-zinc-500 text-sm mt-1">
-          @{creator.username}
-        </p>
-
-        <p className="text-zinc-300 text-sm mt-3">
-          {creator.tagline || creator.bio}
-        </p>
-      </div>
-
-
-      <div className="bg-black/40 border border-zinc-800 rounded-2xl p-4 mb-4 flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium">
-            Voice preview
-          </p>
-          <p className="text-xs text-zinc-500">
-            Listen before starting
-          </p>
+          <span className="text-zinc-500 text-sm">
+            @{creator.username}
+          </span>
         </div>
 
-        <Waveform />
-      </div>
+        <p className="text-zinc-300 text-sm mt-3 line-clamp-2">
+          {creator.tagline || creator.bio}
+        </p>
 
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            handlePreview();
-          }}
-          className="rounded-2xl bg-zinc-800 py-3 text-sm font-semibold hover:bg-zinc-700 transition"
-        >
-          ▶ Preview
-        </button>
+        <div className="mt-5 space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                openProfile();
+              }}
+              className="rounded-2xl bg-zinc-800 py-3 text-xs font-semibold hover:bg-zinc-700 transition"
+            >
+              View profile
+            </button>
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            handleStartChat();
-          }}
-          className="rounded-2xl bg-white text-black py-3 text-sm font-semibold hover:bg-zinc-200 transition"
-        >
-          Start chat
-        </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handlePreview();
+              }}
+              className="rounded-2xl bg-zinc-800 py-3 text-xs font-semibold hover:bg-zinc-700 transition"
+            >
+              ▶ Voice
+            </button>
+          </div>
+
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleStartChat();
+            }}
+            className="w-full rounded-2xl bg-white text-black py-4 text-sm font-bold hover:bg-zinc-200 transition"
+          >
+            Start chat
+          </button>
+        </div>
       </div>
-     </div>
+    </div>
   );
 }

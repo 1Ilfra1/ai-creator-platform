@@ -6,6 +6,8 @@ import { supabase } from "@/lib/supabase";
 
 import AudioPlayer from "@/components/audio/AudioPlayer";
 
+import BottomNav from "@/components/navigation/BottomNav";
+
 interface Creator {
     id: string;
     username: string;
@@ -28,6 +30,8 @@ export default function CreatorProfilePage({
     const { username } = use(params);
 
     const [creator, setCreator] = useState<Creator | null>(null);
+
+    const [showFullBio, setShowFullBio] = useState(false);
 
     useEffect(() => {
 
@@ -55,7 +59,7 @@ export default function CreatorProfilePage({
     }
 
     return (
-        <main className="min-h-screen bg-black text-white">
+        <main className="min-h-screen bg-black text-white pb-24">
 
             <div className="relative h-64 bg-gradient-to-br from-purple-900/70 via-zinc-900 to-black">
 
@@ -100,9 +104,25 @@ export default function CreatorProfilePage({
 
                 </div>
 
-                <p className="text-zinc-300 leading-relaxed mb-4 text-lg">
-                    {creator.tagline}
-                </p>
+                <div className="mb-5">
+                    <p className="text-zinc-300 leading-relaxed text-lg">
+                        {showFullBio
+                            ? creator.bio || creator.tagline
+                            : (creator.bio || creator.tagline || "").slice(0, 130)}
+                        {!showFullBio &&
+                            (creator.bio || creator.tagline || "").length > 130 &&
+                            "..."}
+                    </p>
+
+                    {(creator.bio || creator.tagline || "").length > 130 && (
+                        <button
+                            onClick={() => setShowFullBio((prev) => !prev)}
+                            className="text-sm text-zinc-500 mt-2 hover:text-zinc-300 transition"
+                        >
+                            {showFullBio ? "Show less" : "Show more"}
+                        </button>
+                    )}
+                </div>
 
 
 
@@ -140,7 +160,7 @@ export default function CreatorProfilePage({
                 </button>
 
             </div>
-
+            <BottomNav />
         </main>
     );
 }
