@@ -17,6 +17,9 @@ export default function DashboardPage() {
     const [profileImage, setProfileImage] = useState("");
     const [bannerImage, setBannerImage] = useState("");
     const [introAudio, setIntroAudio] = useState("");
+    const [uploadingAudio, setUploadingAudio] = useState(false);
+    const [uploadingProfileImage, setUploadingProfileImage] = useState(false);
+    const [uploadingBannerImage, setUploadingBannerImage] = useState(false);
     const [tagline, setTagline] = useState("");
     const [personalityPrompt, setPersonalityPrompt] = useState("");
 
@@ -96,6 +99,95 @@ export default function DashboardPage() {
         loadCreator();
 
     }, []);
+
+    async function uploadIntroAudio(
+        event: React.ChangeEvent<HTMLInputElement>
+    ) {
+        const file = event.target.files?.[0];
+
+        if (!file || !creatorId) return;
+
+        try {
+            setUploadingAudio(true);
+
+            const fileExt = file.name.split(".").pop();
+
+            const fileName =
+                `${creatorId}-${Date.now()}.${fileExt}`;
+
+            const { error } = await supabase.storage
+                .from("creator-intros")
+                .upload(fileName, file, {
+                    upsert: true,
+                });
+
+            if (error) {
+                console.error(error);
+                alert("Failed to upload audio.");
+                return;
+            }
+
+            const { data } = supabase.storage
+                .from("creator-intros")
+                .getPublicUrl(fileName);
+
+            setIntroAudio(data.publicUrl);
+
+        } catch (error) {
+            console.error(error);
+            alert("Upload failed.");
+        } finally {
+            setUploadingAudio(false);
+        }
+    }
+
+    async function uploadCreatorAsset(
+        event: React.ChangeEvent<HTMLInputElement>,
+        type: "profile" | "banner"
+    ) {
+        const file = event.target.files?.[0];
+
+        if (!file || !creatorId) return;
+
+        try {
+            if (type === "profile") {
+                setUploadingProfileImage(true);
+            } else {
+                setUploadingBannerImage(true);
+            }
+
+            const fileExt = file.name.split(".").pop();
+            const fileName = `${creatorId}-${type}-${Date.now()}.${fileExt}`;
+
+            const { error } = await supabase.storage
+                .from("creator-assets")
+                .upload(fileName, file, {
+                    upsert: true,
+                });
+
+            if (error) {
+                console.error(error);
+                alert("Failed to upload image.");
+                return;
+            }
+
+            const { data } = supabase.storage
+                .from("creator-assets")
+                .getPublicUrl(fileName);
+
+            if (type === "profile") {
+                setProfileImage(data.publicUrl);
+            } else {
+                setBannerImage(data.publicUrl);
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Upload failed.");
+        } finally {
+            setUploadingProfileImage(false);
+            setUploadingBannerImage(false);
+        }
+    }
 
     async function publishProfile() {
 
@@ -289,41 +381,112 @@ export default function DashboardPage() {
                     </div>
                     <div>
                         <label className="block text-sm mb-2">
-                            Profile image URL
+                            Profile image
                         </label>
 
                         <input
-                            value={profileImage}
-                            onChange={(e) => setProfileImage(e.target.value)}
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => uploadCreatorAsset(e, "profile")}
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
-                            placeholder="https://..."
                         />
+
+                        {uploadingProfileImage && (
+                            <p className="text-sm text-zinc-500 mt-2">
+                                Uploading profile image...
+                            </p>
+                        )}
+
+                        {profileImage && (
+                            <p className="text-sm text-green-400 mt-2">
+                                Profile image uploaded
+                            </p>
+                        )}
                     </div>
 
                     <div>
                         <label className="block text-sm mb-2">
-                            Banner image URL
+                            Banner image
                         </label>
 
                         <input
-                            value={bannerImage}
-                            onChange={(e) => setBannerImage(e.target.value)}
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => uploadCreatorAsset(e, "banner")}
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
-                            placeholder="https://..."
                         />
+
+                        {uploadingBannerImage && (
+                            <p className="text-sm text-zinc-500 mt-2">
+                                Uploading banner image...
+                            </p>
+                        )}
+
+                        {bannerImage && (
+                            <p className="text-sm text-green-400 mt-2">
+                                Banner image uploaded
+                            </p>
+                        )}
                     </div>
 
                     <div>
                         <label className="block text-sm mb-2">
-                            Intro audio URL
+                            Intro voice message
                         </label>
 
+                        <p className="text-xs text-zinc-500 mb-3">
+                            This is the first voice message fans hear when opening your chat.
+                            Keep it warm, short, and welcoming.
+                        </p>
+
                         <input
-                            value={introAudio}
-                            onChange={(e) => setIntroAudio(e.target.value)}
+                            type="file"
+                            accept="audio/*"
+                            onChange={uploadIntroAudio}
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
-                            placeholder="https://..."
                         />
+
+                        {uploadingAudio && (
+                            <p className="text-sm text-zinc-500 mt-2">
+                                Uploading audio...
+                            </p>
+                        )}
+
+                        {introAudio && (
+                            <p className="text-sm text-green-400 mt-2">
+                                Intro audio uploaded
+                            </p>
+                        )}
+                    </div>
+
+
+                    <div className="border border-zinc-800 rounded-3xl p-5 bg-zinc-900/60">
+
+                        <h3 className="text-lg font-semibold mb-2">
+                            AI Voice Setup
+                        </h3>
+
+                        <p className="text-sm text-zinc-400 mb-4">
+                            Connect a voice that your AI creator will use for generated replies.
+                        </p>
+
+                        <div className="space-y-2 text-xs text-zinc-500 mb-5">
+                            <p>• Record in a quiet room</p>
+                            <p>• Avoid music and background noise</p>
+                            <p>• Speak naturally and clearly</p>
+                            <p>• 30–60 seconds works best</p>
+                        </div>
+
+                        <input
+                            type="text"
+                            placeholder="ElevenLabs voice ID"
+                            className="w-full bg-black border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
+                        />
+
+                        <p className="text-xs text-zinc-600 mt-3">
+                            Voice cloning automation will be added later.
+                        </p>
+
                     </div>
 
                     <button
