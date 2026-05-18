@@ -10,6 +10,7 @@ export default function ProfilePage() {
   const [username, setUsername] = useState("");
   const [seconds, setSeconds] = useState(0);
   const [subscriptionStatus, setSubscriptionStatus] = useState("free");
+  const [creatorUsername, setCreatorUsername] = useState("");
 
   useEffect(() => {
     async function getUser() {
@@ -32,6 +33,16 @@ export default function ProfilePage() {
           setUsername(profile.username || "");
           setSeconds(profile.voice_seconds_remaining || 0);
           setSubscriptionStatus(profile.subscription_status || "free");
+        }
+
+        const { data: creator } = await supabase
+          .from("creators")
+          .select("username")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (creator) {
+          setCreatorUsername(creator.username || "");
         }
       }
     }
@@ -90,6 +101,26 @@ export default function ProfilePage() {
           >
             Creator Studio
           </button>
+
+          <button
+            onClick={() => {
+              window.location.href = `/creator/${username}`;
+            }}
+            className="w-full bg-zinc-900 border border-zinc-800 text-white p-4 rounded-2xl font-semibold mb-3"
+          >
+            View public profile
+          </button>
+
+          {creatorUsername && (
+            <button
+              onClick={() => {
+                window.location.href = "/creator-earnings";
+              }}
+              className="w-full bg-zinc-900 border border-zinc-800 text-white p-4 rounded-2xl font-semibold mb-3"
+            >
+              Creator Earnings
+            </button>
+          )}
 
           <button
             onClick={async () => {
