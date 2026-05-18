@@ -70,6 +70,7 @@ export default function CreatorProfilePage({
                         className="absolute inset-0 h-full w-full object-cover"
                     />
                 )}
+                <div className="absolute inset-0 bg-black/40" />
 
             </div>
 
@@ -124,6 +125,12 @@ export default function CreatorProfilePage({
                     )}
                 </div>
 
+                <div className="mb-8">
+                    <p className="text-zinc-400 leading-relaxed">
+                        Stay close anytime 💜
+                        Voice notes, conversations, and moments whenever you need them.
+                    </p>
+                </div>
 
 
                 <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 mb-6">
@@ -132,11 +139,11 @@ export default function CreatorProfilePage({
 
                         <div>
                             <h2 className="font-semibold">
-                                Voice Preview
+                                A little voice note 💜
                             </h2>
 
                             <p className="text-sm text-zinc-500">
-                                Listen before chatting
+                                Hear from me before we talk
                             </p>
                         </div>
 
@@ -154,9 +161,20 @@ export default function CreatorProfilePage({
                     onClick={() => {
                         window.location.href = `/chat/${creator.username}`;
                     }}
-                    className="w-full bg-white text-black py-4 rounded-3xl font-bold text-lg"
+                    className="w-full bg-white text-black py-4 rounded-3xl font-bold text-lg shadow-2xl active:scale-[0.99] transition"
                 >
-                    Start chatting
+                    Talk to me 💜
+                </button>
+
+                <button
+                    onClick={async () => {
+                        await navigator.clipboard.writeText(window.location.href);
+
+                        alert("Profile link copied!");
+                    }}
+                    className="w-full mt-3 bg-zinc-900 border border-zinc-800 text-white py-4 rounded-3xl font-semibold"
+                >
+                    Share profile
                 </button>
 
             </div>

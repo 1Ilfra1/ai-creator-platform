@@ -38,12 +38,12 @@ export default function HomePage() {
         </h1>
 
         <p className="text-zinc-400 mb-6">
-          Emotional AI voice companions.
+          Find creators you can hear from anytime.
         </p>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="🔍 Search creators"
+          placeholder="Search creators..."
           className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 mb-6 outline-none focus:border-zinc-600"
         />
 
@@ -63,7 +63,7 @@ export default function HomePage() {
             </p>
 
             <p className="text-zinc-600 text-sm mt-2">
-              Try searching another username.
+              Try another creator name or username.
             </p>
           </div>
         )}

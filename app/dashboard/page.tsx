@@ -29,6 +29,24 @@ export default function DashboardPage() {
         personalityPrompt &&
         profileImage &&
         introAudio;
+    const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+    const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
+
+    const ALLOWED_IMAGE_TYPES = [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+    ];
+
+    const ALLOWED_AUDIO_TYPES = [
+        "audio/mpeg",
+        "audio/mp3",
+        "audio/wav",
+        "audio/x-wav",
+        "audio/mp4",
+        "audio/m4a",
+        "audio/aac",
+    ];
 
     useEffect(() => {
 
@@ -115,6 +133,16 @@ export default function DashboardPage() {
 
         if (!file || !creatorId) return;
 
+        if (file.size > MAX_AUDIO_SIZE) {
+            alert("Audio file too large.");
+            return;
+        }
+
+        if (!ALLOWED_AUDIO_TYPES.includes(file.type)) {
+            alert("Unsupported audio format.");
+            return;
+        }
+
         try {
             setUploadingAudio(true);
 
@@ -156,6 +184,16 @@ export default function DashboardPage() {
         const file = event.target.files?.[0];
 
         if (!file || !creatorId) return;
+
+        if (file.size > MAX_IMAGE_SIZE) {
+            alert("Image file too large.");
+            return;
+        }
+
+        if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+            alert("Unsupported image format.");
+            return;
+        }
 
         try {
             if (type === "profile") {
@@ -260,11 +298,11 @@ export default function DashboardPage() {
             <main className="min-h-screen bg-black text-white p-6 max-w-2xl mx-auto pb-24">
 
                 <h1 className="text-3xl font-bold mb-2">
-                    Creator Dashboard
+                    Creator Studio
                 </h1>
 
                 <p className="text-zinc-500 mb-8">
-                    Manage your creator identity and AI presence.
+                    Build your creator presence, voice, and fan experience.
                 </p>
 
                 <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden mb-8">
@@ -319,38 +357,7 @@ export default function DashboardPage() {
                     </div>
                 </div>
 
-                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 mb-8">
-                    <h2 className="text-lg font-semibold mb-2">
-                        Share your creator profile
-                    </h2>
 
-                    <p className="text-sm text-zinc-500 mb-4">
-                        Copy your public link and share it in stories, bio, or DMs.
-                    </p>
-
-                    <button
-                        onClick={async () => {
-                            const link = `${window.location.origin}/creator/${username}`;
-
-                            await navigator.clipboard.writeText(link);
-
-                            alert("Profile link copied!");
-                        }}
-                        className="w-full bg-white text-black py-4 rounded-2xl font-bold"
-                    >
-                        Copy profile link
-                    </button>
-
-                    <div className="mt-4 bg-zinc-950 border border-zinc-800 rounded-2xl p-4">
-                        <p className="text-xs text-zinc-500 mb-2">
-                            Share tip
-                        </p>
-
-                        <p className="text-sm text-zinc-300 leading-relaxed">
-                            “Chat with my AI voice 💜”
-                        </p>
-                    </div>
-                </div>
 
                 <div className="space-y-6">
 
@@ -531,6 +538,38 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 mb-8">
+                        <h2 className="text-lg font-semibold mb-2">
+                            Share your creator profile
+                        </h2>
+
+                        <p className="text-sm text-zinc-500 mb-4">
+                            Copy your public link and share it in stories, bio, or DMs.
+                        </p>
+
+                        <button
+                            onClick={async () => {
+                                const link = `${window.location.origin}/creator/${username}`;
+
+                                await navigator.clipboard.writeText(link);
+
+                                alert("Profile link copied!");
+                            }}
+                            className="w-full bg-white text-black py-4 rounded-2xl font-bold"
+                        >
+                            Copy profile link
+                        </button>
+
+                        <div className="mt-4 bg-zinc-950 border border-zinc-800 rounded-2xl p-4">
+                            <p className="text-xs text-zinc-500 mb-2">
+                                Share tip
+                            </p>
+
+                            <p className="text-sm text-zinc-300 leading-relaxed">
+                                “Chat with my AI voice 💜”
+                            </p>
+                        </div>
+                    </div>
 
 
                     <button
