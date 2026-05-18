@@ -17,11 +17,18 @@ export default function DashboardPage() {
     const [profileImage, setProfileImage] = useState("");
     const [bannerImage, setBannerImage] = useState("");
     const [introAudio, setIntroAudio] = useState("");
+    const [voiceId, setVoiceId] = useState("");
     const [uploadingAudio, setUploadingAudio] = useState(false);
     const [uploadingProfileImage, setUploadingProfileImage] = useState(false);
     const [uploadingBannerImage, setUploadingBannerImage] = useState(false);
     const [tagline, setTagline] = useState("");
     const [personalityPrompt, setPersonalityPrompt] = useState("");
+    const profileComplete =
+        displayName &&
+        tagline &&
+        personalityPrompt &&
+        profileImage &&
+        introAudio;
 
     useEffect(() => {
 
@@ -82,6 +89,7 @@ export default function DashboardPage() {
                 setProfileImage(creator.profile_image || "");
                 setBannerImage(creator.banner_image || "");
                 setIntroAudio(creator.intro_audio || "");
+                setVoiceId(creator.voice_id || "");
             }
 
             if (data) {
@@ -225,6 +233,7 @@ export default function DashboardPage() {
                 profile_image: profileImage,
                 banner_image: bannerImage,
                 intro_audio: introAudio,
+                voice_id: voiceId,
             })
             .eq("id", creatorId);
 
@@ -307,6 +316,39 @@ export default function DashboardPage() {
                                 ▶ Preview intro audio
                             </button>
                         )}
+                    </div>
+                </div>
+
+                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 mb-8">
+                    <h2 className="text-lg font-semibold mb-2">
+                        Share your creator profile
+                    </h2>
+
+                    <p className="text-sm text-zinc-500 mb-4">
+                        Copy your public link and share it in stories, bio, or DMs.
+                    </p>
+
+                    <button
+                        onClick={async () => {
+                            const link = `${window.location.origin}/creator/${username}`;
+
+                            await navigator.clipboard.writeText(link);
+
+                            alert("Profile link copied!");
+                        }}
+                        className="w-full bg-white text-black py-4 rounded-2xl font-bold"
+                    >
+                        Copy profile link
+                    </button>
+
+                    <div className="mt-4 bg-zinc-950 border border-zinc-800 rounded-2xl p-4">
+                        <p className="text-xs text-zinc-500 mb-2">
+                            Share tip
+                        </p>
+
+                        <p className="text-sm text-zinc-300 leading-relaxed">
+                            “Chat with my AI voice 💜”
+                        </p>
                     </div>
                 </div>
 
@@ -459,35 +501,37 @@ export default function DashboardPage() {
                         )}
                     </div>
 
-
                     <div className="border border-zinc-800 rounded-3xl p-5 bg-zinc-900/60">
-
                         <h3 className="text-lg font-semibold mb-2">
                             AI Voice Setup
                         </h3>
 
                         <p className="text-sm text-zinc-400 mb-4">
-                            Connect a voice that your AI creator will use for generated replies.
+                            Paste the ElevenLabs voice ID your AI creator will use for generated replies.
                         </p>
 
-                        <div className="space-y-2 text-xs text-zinc-500 mb-5">
-                            <p>• Record in a quiet room</p>
-                            <p>• Avoid music and background noise</p>
-                            <p>• Speak naturally and clearly</p>
-                            <p>• 30–60 seconds works best</p>
-                        </div>
-
                         <input
+                            value={voiceId}
+                            onChange={(e) => setVoiceId(e.target.value)}
                             type="text"
                             placeholder="ElevenLabs voice ID"
                             className="w-full bg-black border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
                         />
 
-                        <p className="text-xs text-zinc-600 mt-3">
-                            Voice cloning automation will be added later.
-                        </p>
+                        {voiceId && (
+                            <p className="text-sm text-green-400 mt-2">
+                                Voice ID connected
+                            </p>
+                        )}
 
+                        <div className="space-y-2 text-xs text-zinc-500 mt-5">
+                            <p>• Use a voice you own or have permission to use</p>
+                            <p>• This voice will generate AI replies</p>
+                            <p>• Intro voice message is separate from AI reply voice</p>
+                        </div>
                     </div>
+
+
 
                     <button
                         onClick={saveProfile}
@@ -496,7 +540,23 @@ export default function DashboardPage() {
                         Save profile
                     </button>
 
-                    {!isPublished && (
+                    {!profileComplete && (
+                        <div className="border border-yellow-900 bg-yellow-950/30 rounded-3xl p-5">
+                            <h3 className="font-semibold text-yellow-300 mb-3">
+                                Complete your creator setup
+                            </h3>
+
+                            <div className="space-y-2 text-sm">
+                                <p>{displayName ? "✅" : "⬜"} Display name</p>
+                                <p>{tagline ? "✅" : "⬜"} Creator description</p>
+                                <p>{personalityPrompt ? "✅" : "⬜"} Personality setup</p>
+                                <p>{profileImage ? "✅" : "⬜"} Profile image</p>
+                                <p>{introAudio ? "✅" : "⬜"} Intro voice message</p>
+                            </div>
+                        </div>
+                    )}
+
+                    {!isPublished && profileComplete && (
                         <button
                             onClick={publishProfile}
                             className="w-full bg-zinc-800 text-white py-4 rounded-2xl font-bold mt-3"
