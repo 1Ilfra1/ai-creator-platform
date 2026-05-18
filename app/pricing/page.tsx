@@ -37,16 +37,19 @@ export default function PricingPage() {
                         </span>
                     </h2>
 
-                    <p className="text-zinc-400 mb-6">
-                        Includes monthly creator voice minutes.
-                    </p>
+                    <div className="space-y-3 text-zinc-300 mb-6">
+                        <p>✅ 60 voice minutes every month</p>
+                        <p>✅ Voice replies from AI creators</p>
+                        <p>✅ Continue your private conversations</p>
+                        <p>✅ More minutes can be added later</p>
+                    </div>
 
                     <button
                         onClick={async () => {
                             const {
                                 data: { user },
                             } = await supabase.auth.getUser();
-                            
+
                             if (!user) {
                                 router.push("/login");
                                 return;
@@ -73,8 +76,18 @@ export default function PricingPage() {
                         }}
                         className="w-full bg-green-500 text-black py-4 rounded-2xl font-bold"
                     >
-                        Continue listening
+                        Start Premium
                     </button>
+                </div>
+
+                <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5 mb-4">
+                    <h3 className="font-semibold mb-2">
+                        Need more voice minutes?
+                    </h3>
+
+                    <p className="text-sm text-zinc-500">
+                        Extra minute packs will be available soon, so you can keep listening without waiting for the next month.
+                    </p>
                 </div>
 
                 <p className="text-xs text-zinc-600 text-center">

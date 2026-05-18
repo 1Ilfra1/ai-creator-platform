@@ -43,6 +43,8 @@ export default function ChatPage({
     const [input, setInput] = useState("");
     const [isTyping, setIsTyping] = useState(false);
     const [showPaywall, setShowPaywall] = useState(false);
+    const [subscriptionStatus, setSubscriptionStatus] = useState("free");
+    const [remainingSeconds, setRemainingSeconds] = useState(0);
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
@@ -56,6 +58,22 @@ export default function ChatPage({
             if (!user) {
                 router.push("/login");
                 return;
+            }
+
+            const { data: profile } = await supabase
+                .from("profiles")
+                .select("subscription_status, voice_seconds_remaining")
+                .eq("id", user.id)
+                .single();
+
+            if (profile) {
+                setSubscriptionStatus(
+                    profile.subscription_status || "free"
+                );
+
+                setRemainingSeconds(
+                    profile.voice_seconds_remaining || 0
+                );
             }
 
             const { data: creatorData, error: creatorError } = await supabase
@@ -176,6 +194,15 @@ export default function ChatPage({
         ) {
             return;
         }
+
+        if (
+            remainingSeconds <= 0 &&
+            subscriptionStatus !== "active"
+        ) {
+            setShowPaywall(true);
+            return;
+        }
+
         const {
             data: { user },
         } = await supabase.auth.getUser();
@@ -302,6 +329,10 @@ export default function ChatPage({
                 seconds_to_decrease: estimatedSeconds,
             });
 
+            setRemainingSeconds((prev) =>
+                Math.max(0, prev - estimatedSeconds)
+            );
+
             setIsTyping(false);
             inputRef.current?.focus();
         }, 900);
@@ -347,6 +378,21 @@ export default function ChatPage({
     return (
         <main className="min-h-screen bg-black text-white flex flex-col">
             <header className="sticky top-0 z-10 border-b border-zinc-800 bg-black/90 backdrop-blur p-4">
+                <div className="px-4 py-2 border-b border-zinc-900 bg-zinc-950/60">
+                    <div className="flex items-center justify-between text-xs text-zinc-500">
+
+                        <p>
+                            {Math.ceil(remainingSeconds / 60)} min left
+                        </p>
+
+                        <p>
+                            {subscriptionStatus === "active"
+                                ? "Premium"
+                                : "Free"}
+                        </p>
+
+                    </div>
+                </div>
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => router.push("/chats")}
@@ -458,8 +504,31 @@ export default function ChatPage({
                                 )}
 
                             {message.audio_url && (
-                                <AudioPlayer audioUrl={message.audio_url} />
+                                subscriptionStatus === "active" || remainingSeconds > 0 ? (
+                                    <AudioPlayer audioUrl={message.audio_url} />
+                                ) : (
+                                    <button
+                                        onClick={() => setShowPaywall(true)}
+                                        className="w-[230px] max-w-full bg-zinc-950/80 border border-zinc-800 rounded-3xl px-3 py-3 mt-3 text-left"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="rounded-full w-10 h-10 bg-zinc-800 text-zinc-400 flex items-center justify-center">
+                                                🔒
+                                            </div>
+
+                                            <div>
+                                                <p className="text-sm font-semibold text-zinc-300">
+                                                    Voice locked
+                                                </p>
+                                                <p className="text-xs text-zinc-500">
+                                                    Continue to keep listening
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </button>
+                                )
                             )}
+
                             {message.created_at && (
                                 <p
                                     className={`text-[10px] mt-2 ${message.sender_type === "user"
@@ -524,8 +593,12 @@ export default function ChatPage({
                         <div className="text-4xl mb-4">💜</div>
 
                         <h2 className="text-2xl font-bold mb-2">
-                            Your free voice time is over
+                            You’re out of voice minutes
                         </h2>
+
+                        <p className="text-zinc-400 mb-6">
+                            Upgrade to Premium and get 60 voice minutes every month. More minutes can be added later.
+                        </p>
 
                         <p className="text-zinc-400 mb-6">
                             Continue the conversation and keep listening to creator voice replies.

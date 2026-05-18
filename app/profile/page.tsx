@@ -9,6 +9,7 @@ export default function ProfilePage() {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [seconds, setSeconds] = useState(0);
+  const [monthlyAllowance, setMonthlyAllowance] = useState(180);
   const [subscriptionStatus, setSubscriptionStatus] = useState("free");
 
   useEffect(() => {
@@ -22,15 +23,17 @@ export default function ProfilePage() {
 
         const { data: profile } = await supabase
           .from("profiles")
-          .select("username, voice_seconds_remaining, subscription_status")
+          .select(
+            "username, voice_seconds_remaining, subscription_status, voice_seconds_monthly_allowance"
+          )
           .eq("id", user.id)
           .single();
 
         if (profile) {
           setUsername(profile.username || "");
-
-          setSeconds(
-            profile.voice_seconds_remaining || 0
+          setSeconds(profile.voice_seconds_remaining || 0);
+          setMonthlyAllowance(
+            profile.voice_seconds_monthly_allowance || 180
           );
           setSubscriptionStatus(profile.subscription_status || "free");
         }
@@ -80,6 +83,16 @@ export default function ProfilePage() {
                 {minutes}m {remainingSeconds}s
               </p>
             </div>
+          </div>
+
+          <div className="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 mb-6">
+            <p className="text-sm text-zinc-500">
+              Monthly allowance
+            </p>
+
+            <p className="text-lg font-semibold mt-1">
+              {Math.floor(monthlyAllowance / 60)} voice minutes / month
+            </p>
           </div>
 
           <button
