@@ -1,9 +1,12 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
+import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+const MAX_MESSAGE_LENGTH = 500;
 
 const fallbackReplies = [
   "I’m here with you 💜",
@@ -23,21 +26,45 @@ function getFallbackReply() {
 
 export async function POST(request: Request) {
   try {
+    const authHeader = request.headers.get("authorization");
+    const token = authHeader?.replace("Bearer ", "");
+
+    if (!token) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAdmin.auth.getUser(token);
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
     const body = await request.json();
 
-    const message = body.message;
+    const rawMessage = String(body.message || "");
+
+    const message =
+      rawMessage.length > MAX_MESSAGE_LENGTH
+        ? rawMessage.slice(0, MAX_MESSAGE_LENGTH)
+        : rawMessage;
+
     const creatorName = body.creatorName || "Creator";
     const creatorTagline = body.creatorTagline || "";
     const creatorStyle = body.creatorStyle || "";
 
     if (!message) {
       return NextResponse.json(
-        {
-          error: "Message required",
-        },
-        {
-          status: 400,
-        }
+        { error: "Message required" },
+        { status: 400 }
       );
     }
 

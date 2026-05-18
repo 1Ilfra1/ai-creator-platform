@@ -45,6 +45,7 @@ export default function ChatPage({
     const [showPaywall, setShowPaywall] = useState(false);
     const [subscriptionStatus, setSubscriptionStatus] = useState("free");
     const [remainingSeconds, setRemainingSeconds] = useState(0);
+    const MAX_MESSAGE_LENGTH = 500;
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
@@ -223,6 +224,10 @@ export default function ChatPage({
             return;
         }
 
+        if (messageText.length > MAX_MESSAGE_LENGTH) {
+            return;
+        }
+
         const text = messageText;
 
         const moderationResponse = await fetch("/api/moderate", {
@@ -261,10 +266,15 @@ export default function ChatPage({
         setTimeout(async () => {
             buildCreatorSafetyPrompt();
 
+            const {
+                data: { session: chatSession },
+            } = await supabase.auth.getSession();
+
             const aiResponse = await fetch("/api/chat", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
+                    Authorization: `Bearer ${chatSession?.access_token}`,
                 },
                 body: JSON.stringify({
                     message: text,
@@ -289,14 +299,20 @@ export default function ChatPage({
                     ? `${aiText.slice(0, 500)}...`
                     : aiText;
 
+            const {
+                data: { session },
+            } = await supabase.auth.getSession();
+
             const voiceResponse = await fetch("/api/voice", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
+                    Authorization: `Bearer ${session?.access_token}`,
                 },
                 body: JSON.stringify({
                     text: voiceText,
                     voiceId: creator.voice_id,
+                    estimatedSeconds,
                 }),
             });
 
@@ -320,18 +336,14 @@ export default function ChatPage({
                 .select()
                 .single();
 
+            if (typeof voiceData.secondsRemaining === "number") {
+                setRemainingSeconds(voiceData.secondsRemaining);
+            }
+
             if (savedAiMessage) {
                 setMessages((prev) => [...prev, savedAiMessage]);
                 playSoftPing();
             }
-
-            await supabase.rpc("decrease_voice_seconds", {
-                seconds_to_decrease: estimatedSeconds,
-            });
-
-            setRemainingSeconds((prev) =>
-                Math.max(0, prev - estimatedSeconds)
-            );
 
             setIsTyping(false);
             inputRef.current?.focus();
@@ -393,6 +405,7 @@ export default function ChatPage({
 
                     </div>
                 </div>
+
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => router.push("/chats")}
@@ -586,7 +599,20 @@ export default function ChatPage({
                         Send
                     </button>
                 </div>
+                <div className="mt-2 flex justify-end">
+                    <p
+                        className={`text-xs ${input.length > MAX_MESSAGE_LENGTH
+                            ? "text-red-500"
+                            : "text-zinc-500"
+                            }`}
+                    >
+                        {input.length}/{MAX_MESSAGE_LENGTH}
+                    </p>
+                </div>
             </div>
+
+
+
             {showPaywall && (
                 <div className="fixed inset-0 bg-black/80 backdrop-blur z-50 flex items-center justify-center p-6">
                     <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 max-w-sm w-full text-center">
