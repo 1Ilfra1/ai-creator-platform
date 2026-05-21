@@ -230,10 +230,15 @@ export default function ChatPage({
 
         const text = messageText;
 
+        const {
+            data: { session: moderationSession },
+        } = await supabase.auth.getSession();
+
         const moderationResponse = await fetch("/api/moderate", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
+                Authorization: `Bearer ${moderationSession?.access_token}`,
             },
             body: JSON.stringify({ text }),
         });
@@ -270,6 +275,13 @@ export default function ChatPage({
                 data: { session: chatSession },
             } = await supabase.auth.getSession();
 
+            const recentMessages = messages
+                .slice(-8)
+                .map((message) => ({
+                    role: message.sender_type === "user" ? "user" : "assistant",
+                    content: message.text,
+                }));
+
             const aiResponse = await fetch("/api/chat", {
                 method: "POST",
                 headers: {
@@ -281,6 +293,7 @@ export default function ChatPage({
                     creatorName: creator.display_name,
                     creatorTagline: creator.tagline,
                     creatorStyle: creator.personality_prompt,
+                    recentMessages,
                 }),
             });
 
@@ -452,8 +465,10 @@ export default function ChatPage({
                             ].map((reply) => (
                                 <button
                                     key={reply}
+                                    disabled={isTyping}
                                     onClick={() => useSuggestedReply(reply)}
-                                    className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-zinc-200"
+                                    className={`bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-zinc-200 ${isTyping ? "opacity-50 cursor-not-allowed" : ""
+                                        }`}
                                 >
                                     💬 {reply}
                                 </button>
@@ -580,7 +595,7 @@ export default function ChatPage({
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => {
-                            if (e.key === "Enter") {
+                            if (e.key === "Enter" && !isTyping) {
                                 sendMessage();
                             }
                         }}

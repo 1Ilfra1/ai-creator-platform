@@ -101,6 +101,19 @@ export async function POST(request: Request) {
       });
     }
 
+    const { error: lockError } = await supabaseAdmin
+      .from("voice_generation_locks")
+      .insert({
+        user_id: user.id,
+      });
+
+    if (lockError) {
+      return NextResponse.json(
+        { error: "Voice generation already in progress" },
+        { status: 429 }
+      );
+    }
+
     const elevenlabs = new ElevenLabsClient({ apiKey });
 
     const audio = await elevenlabs.textToSpeech.convert(voiceId, {
@@ -126,6 +139,11 @@ export async function POST(request: Request) {
     if (uploadError) {
       console.error("Voice upload failed:", uploadError);
 
+      await supabaseAdmin
+        .from("voice_generation_locks")
+        .delete()
+        .eq("user_id", user.id);
+
       return NextResponse.json({
         audioUrl: "/mock-voice.mp3",
         fallback: true,
@@ -147,6 +165,11 @@ export async function POST(request: Request) {
     const { data } = supabaseAdmin.storage
       .from("voice-messages")
       .getPublicUrl(fileName);
+
+    await supabaseAdmin
+      .from("voice_generation_locks")
+      .delete()
+      .eq("user_id", user.id);
 
     return NextResponse.json({
       audioUrl: data.publicUrl,
