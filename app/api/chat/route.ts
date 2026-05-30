@@ -7,6 +7,7 @@ const openai = new OpenAI({
 });
 
 const MAX_MESSAGE_LENGTH = 500;
+const DAILY_CHAT_LIMIT = 500;
 
 const fallbackReplies = [
   "I’m here with you 💜",
@@ -26,6 +27,12 @@ function getFallbackReply() {
 
 export async function POST(request: Request) {
   try {
+    if (process.env.EMERGENCY_MODE === "true") {
+      return NextResponse.json(
+        { error: "Service temporarily unavailable" },
+        { status: 503 }
+      );
+    }
     const authHeader = request.headers.get("authorization");
     const token = authHeader?.replace("Bearer ", "");
 
@@ -69,12 +76,37 @@ export async function POST(request: Request) {
       );
     }
 
+
+    const oneDayAgo = new Date(
+      Date.now() - 24 * 60 * 60 * 1000
+    ).toISOString();
+
+    const { count: dailyCount } = await supabaseAdmin
+      .from("api_rate_limits")
+      .select("*", {
+        count: "exact",
+        head: true,
+      })
+      .eq("user_id", user.id)
+      .eq("endpoint", "chat")
+      .gte("created_at", oneDayAgo);
+
+    if ((dailyCount || 0) >= 100) {
+      return NextResponse.json(
+        { error: "Daily chat limit reached" },
+        { status: 429 }
+      );
+    }
+
+
     await supabaseAdmin
       .from("api_rate_limits")
       .insert({
         user_id: user.id,
         endpoint: "chat",
       });
+
+
 
     const body = await request.json();
 
