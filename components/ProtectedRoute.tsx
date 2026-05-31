@@ -8,30 +8,49 @@ export default function ProtectedRoute({
 }: {
   children: React.ReactNode;
 }) {
-
-  const [loading, setLoading] = useState(true);
+  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
 
     async function checkUser() {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+        if (cancelled) return;
 
-      if (!user) {
-        window.location.href = "/login";
-        return;
+        if (!session?.user) {
+          window.location.href = "/login";
+          return;
+        }
+
+        setChecked(true);
+      } catch (error) {
+        console.error("Protected route check failed:", error);
+
+        if (!cancelled) {
+          setChecked(true);
+        }
       }
-
-      setLoading(false);
     }
 
     checkUser();
 
+    const timeout = setTimeout(() => {
+      if (!cancelled) {
+        setChecked(true);
+      }
+    }, 2000);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
   }, []);
 
-  if (loading) {
+  if (!checked) {
     return (
       <main className="min-h-screen bg-black text-white flex items-center justify-center">
         Loading...
