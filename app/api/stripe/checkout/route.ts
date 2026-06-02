@@ -54,6 +54,24 @@ export async function POST(request: Request) {
         endpoint: "stripe_checkout",
       });
 
+    const body = await request.json();
+    const plan = String(body.plan || "premium");
+
+    const priceMap: Record<string, string | undefined> = {
+      starter: process.env.STRIPE_STARTER_PRICE_ID,
+      premium: process.env.STRIPE_PREMIUM_PRICE_ID,
+      vip: process.env.STRIPE_VIP_PRICE_ID,
+    };
+
+    const priceId = priceMap[plan];
+
+    if (!priceId) {
+      return NextResponse.json(
+        { error: "Invalid plan" },
+        { status: 400 }
+      );
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
 
@@ -65,24 +83,12 @@ export async function POST(request: Request) {
 
       metadata: {
         user_id: user.id,
+        plan,
       },
 
       line_items: [
         {
-          price_data: {
-            currency: "usd",
-
-            product_data: {
-              name: "Creator Voice Premium",
-            },
-
-            recurring: {
-              interval: "month",
-            },
-
-            unit_amount: 999,
-          },
-
+          price: priceId,
           quantity: 1,
         },
       ],

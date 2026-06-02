@@ -7,7 +7,17 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
-const PREMIUM_MONTHLY_SECONDS = 3600;
+const PLAN_SECONDS: Record<string, number> = {
+  starter: 1200,
+  premium: 3600,
+  vip: 10800,
+};
+
+const TOPUP_SECONDS: Record<string, number> = {
+  "30": 1800,
+  "60": 3600,
+  "120": 7200,
+};
 
 export async function POST(req: Request) {
   const body = await req.text();
@@ -38,6 +48,32 @@ export async function POST(req: Request) {
     );
   }
 
+  const { error: eventInsertError } = await supabaseAdmin
+    .from("stripe_events")
+    .insert({
+      id: event.id,
+      type: event.type,
+    });
+
+  if (eventInsertError) {
+    if (eventInsertError.code === "23505") {
+      return NextResponse.json({
+        received: true,
+        duplicate: true,
+      });
+    }
+
+    console.error(
+      "Stripe event idempotency insert failed:",
+      eventInsertError
+    );
+
+    return NextResponse.json(
+      { error: "Webhook idempotency failed" },
+      { status: 500 }
+    );
+  }
+
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as Stripe.Checkout.Session;
 
@@ -55,15 +91,59 @@ export async function POST(req: Request) {
         : session.subscription?.id;
 
     if (userId) {
+      const topupPack = session.metadata?.topup_pack;
+
+      if (topupPack) {
+        const topupSeconds = TOPUP_SECONDS[topupPack];
+
+        if (!topupSeconds) {
+          return NextResponse.json(
+            { error: "Invalid top-up pack" },
+            { status: 400 }
+          );
+        }
+
+        const { data: profile } = await supabaseAdmin
+          .from("profiles")
+          .select("voice_seconds_remaining")
+          .eq("id", userId)
+          .single();
+
+        const currentSeconds =
+          profile?.voice_seconds_remaining || 0;
+
+        const { error } = await supabaseAdmin
+          .from("profiles")
+          .update({
+            stripe_customer_id: customerId || null,
+            voice_seconds_remaining:
+              currentSeconds + topupSeconds,
+            has_paid_before: true,
+          })
+          .eq("id", userId);
+
+        if (error) {
+          console.error("Top-up update failed:", error);
+        }
+
+        return NextResponse.json({
+          received: true,
+        });
+      }
+
+      const plan = session.metadata?.plan || "premium";
+      const monthlySeconds = PLAN_SECONDS[plan] || PLAN_SECONDS.premium;
+
       const { error } = await supabaseAdmin
         .from("profiles")
         .update({
           subscription_status: "active",
-          plan: "premium_basic",
+          plan,
           stripe_customer_id: customerId || null,
           stripe_subscription_id: subscriptionId || null,
-          voice_seconds_remaining: PREMIUM_MONTHLY_SECONDS,
-          voice_seconds_monthly_allowance: PREMIUM_MONTHLY_SECONDS,
+          voice_seconds_remaining: monthlySeconds,
+          voice_seconds_monthly_allowance: monthlySeconds,
+          has_paid_before: true,
         })
         .eq("id", userId);
 
@@ -101,13 +181,23 @@ export async function POST(req: Request) {
         : invoice.subscription?.id;
 
     if (subscriptionId) {
+      const { data: profile } = await supabaseAdmin
+        .from("profiles")
+        .select("plan")
+        .eq("stripe_subscription_id", subscriptionId)
+        .single();
+
+      const plan = profile?.plan || "premium";
+      const monthlySeconds = PLAN_SECONDS[plan] || PLAN_SECONDS.premium;
+
       const { error } = await supabaseAdmin
         .from("profiles")
         .update({
           subscription_status: "active",
-          plan: "premium_basic",
-          voice_seconds_remaining: PREMIUM_MONTHLY_SECONDS,
-          voice_seconds_monthly_allowance: PREMIUM_MONTHLY_SECONDS,
+          plan,
+          voice_seconds_remaining: monthlySeconds,
+          voice_seconds_monthly_allowance: monthlySeconds,
+          has_paid_before: true,
         })
         .eq("stripe_subscription_id", subscriptionId);
 

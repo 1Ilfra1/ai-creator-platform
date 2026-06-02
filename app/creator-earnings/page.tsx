@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import ProtectedRoute from "@/components/ProtectedRoute";
 import BottomNav from "@/components/navigation/BottomNav";
@@ -8,6 +9,8 @@ import BottomNav from "@/components/navigation/BottomNav";
 import { supabase } from "@/lib/supabase";
 
 export default function CreatorEarningsPage() {
+  const router = useRouter();
+
   const [loading, setLoading] = useState(true);
 
   const [conversationCount, setConversationCount] = useState(0);
@@ -16,50 +19,66 @@ export default function CreatorEarningsPage() {
 
   useEffect(() => {
     async function loadAnalytics() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-      if (!user) return;
+        if (!user) {
+          router.replace("/login");
+          return;
+        }
 
-      const { data: creator } = await supabase
-        .from("creators")
-        .select("id")
-        .eq("user_id", user.id)
-        .maybeSingle();
+        const { data: creator } = await supabase
+          .from("creators")
+          .select("id, username, display_name, tagline, personality_prompt, profile_image, intro_audio, voice_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
 
-      if (!creator) {
+        if (
+          !creator?.username ||
+          !creator.display_name ||
+          !creator.tagline ||
+          !creator.personality_prompt ||
+          !creator.profile_image ||
+          !creator.intro_audio ||
+          !creator.voice_id
+        ) {
+          router.replace("/profile");
+          return;
+        }
+
+        const { data: conversations } = await supabase
+          .from("conversations")
+          .select("id")
+          .eq("creator_id", creator.id);
+
+        const conversationIds =
+          conversations?.map((c) => c.id) || [];
+
+        setConversationCount(conversationIds.length);
+
+        if (conversationIds.length > 0) {
+          const { data: messages } = await supabase
+            .from("messages")
+            .select("voice_generated")
+            .in("conversation_id", conversationIds);
+
+          setMessageCount(messages?.length || 0);
+
+          const generatedVoices =
+            messages?.filter(
+              (m) => m.voice_generated
+            ).length || 0;
+
+          setVoiceGenerations(generatedVoices);
+        }
+
+      } catch (error) {
+        console.error("Failed to load creator earnings:", error);
+      } finally {
         setLoading(false);
-        return;
       }
-
-      const { data: conversations } = await supabase
-        .from("conversations")
-        .select("id")
-        .eq("creator_id", creator.id);
-
-      const conversationIds =
-        conversations?.map((c) => c.id) || [];
-
-      setConversationCount(conversationIds.length);
-
-      if (conversationIds.length > 0) {
-        const { data: messages } = await supabase
-          .from("messages")
-          .select("voice_generated")
-          .in("conversation_id", conversationIds);
-
-        setMessageCount(messages?.length || 0);
-
-        const generatedVoices =
-          messages?.filter(
-            (m) => m.voice_generated
-          ).length || 0;
-
-        setVoiceGenerations(generatedVoices);
-      }
-
-      setLoading(false);
     }
 
     loadAnalytics();

@@ -45,10 +45,12 @@ export default function ChatPage({
     const [showPaywall, setShowPaywall] = useState(false);
     const [subscriptionStatus, setSubscriptionStatus] = useState("free");
     const [remainingSeconds, setRemainingSeconds] = useState(0);
+    const [hasPaidBefore, setHasPaidBefore] = useState(false);
     const MAX_MESSAGE_LENGTH = 500;
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
+    const sendingRef = useRef(false);
 
     useEffect(() => {
         async function setupConversation() {
@@ -57,13 +59,13 @@ export default function ChatPage({
             } = await supabase.auth.getUser();
 
             if (!user) {
-                router.push("/login");
+                router.push(`/login?next=${encodeURIComponent(`/chat/${username}`)}`);
                 return;
             }
 
             const { data: profile } = await supabase
                 .from("profiles")
-                .select("subscription_status, voice_seconds_remaining")
+                .select("subscription_status, voice_seconds_remaining, has_paid_before")
                 .eq("id", user.id)
                 .single();
 
@@ -75,6 +77,8 @@ export default function ChatPage({
                 setRemainingSeconds(
                     profile.voice_seconds_remaining || 0
                 );
+
+                setHasPaidBefore(profile.has_paid_before || false);
             }
 
             const { data: creatorData, error: creatorError } = await supabase
@@ -187,11 +191,15 @@ export default function ChatPage({
                 ? prefilledText.trim()
                 : input.trim();
 
+        const lastMessage = messages[messages.length - 1];
+
         if (
             !messageText ||
             !conversationId ||
             !creator ||
-            isTyping
+            isTyping ||
+            sendingRef.current ||
+            lastMessage?.sender_type === "user"
         ) {
             return;
         }
@@ -209,7 +217,7 @@ export default function ChatPage({
         } = await supabase.auth.getUser();
 
         if (!user) {
-            router.push("/login");
+            router.push(`/login?next=${encodeURIComponent(`/chat/${username}`)}`);
             return;
         }
 
@@ -228,138 +236,154 @@ export default function ChatPage({
             return;
         }
 
-        const text = messageText;
-
-        const {
-            data: { session: moderationSession },
-        } = await supabase.auth.getSession();
-
-        const moderationResponse = await fetch("/api/moderate", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${moderationSession?.access_token}`,
-            },
-            body: JSON.stringify({ text }),
-        });
-
-        const moderationData = await moderationResponse.json();
-
-        if (!moderationData.allowed) {
-            alert(moderationData.reason);
-            return;
-        }
-
-        setInput("");
-
-        const { data: savedUserMessage } = await supabase
-            .from("messages")
-            .insert({
-                conversation_id: conversationId,
-                sender_type: "user",
-                text,
-            })
-            .select()
-            .single();
-
-        if (savedUserMessage) {
-            setMessages((prev) => [...prev, savedUserMessage]);
-        }
-
+        sendingRef.current = true;
         setIsTyping(true);
 
-        setTimeout(async () => {
-            buildCreatorSafetyPrompt();
+        const text = messageText;
 
+        try {
             const {
-                data: { session: chatSession },
+                data: { session: moderationSession },
             } = await supabase.auth.getSession();
 
-            const recentMessages = messages
-                .slice(-8)
-                .map((message) => ({
-                    role: message.sender_type === "user" ? "user" : "assistant",
-                    content: message.text,
-                }));
-
-            const aiResponse = await fetch("/api/chat", {
+            const moderationResponse = await fetch("/api/moderate", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${chatSession?.access_token}`,
+                    Authorization: `Bearer ${moderationSession?.access_token}`,
                 },
-                body: JSON.stringify({
-                    message: text,
-                    creatorName: creator.display_name,
-                    creatorTagline: creator.tagline,
-                    creatorStyle: creator.personality_prompt,
-                    recentMessages,
-                }),
+                body: JSON.stringify({ text }),
             });
 
-            const aiData = await aiResponse.json();
-            const isFallback = aiData.fallback || false;
-            const aiText = aiData.reply || "Tell me more.";
-            const wordCount = aiText.trim().split(/\s+/).length;
+            const moderationData = await moderationResponse.json();
 
-            const estimatedSeconds = Math.min(
-                30,
-                Math.max(3, Math.ceil(wordCount / 2.5))
-            );
+            if (!moderationData.allowed) {
+                alert(moderationData.reason);
+                sendingRef.current = false;
+                setIsTyping(false);
+                return;
+            }
 
-            const voiceText =
-                aiText.length > 500
-                    ? `${aiText.slice(0, 500)}...`
-                    : aiText;
+            setInput("");
 
-            const {
-                data: { session },
-            } = await supabase.auth.getSession();
-
-            const voiceResponse = await fetch("/api/voice", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${session?.access_token}`,
-                },
-                body: JSON.stringify({
-                    text: voiceText,
-                    voiceId: creator.voice_id,
-                    estimatedSeconds,
-                }),
-            });
-
-            const voiceData = await voiceResponse.json();
-            const audioUrl = voiceData.audio
-                ? `data:${voiceData.mimeType};base64,${voiceData.audio}`
-                : voiceData.audioUrl;
-
-            const { data: savedAiMessage } = await supabase
+            const { data: savedUserMessage } = await supabase
                 .from("messages")
                 .insert({
                     conversation_id: conversationId,
-                    sender_type: "ai",
-                    text: aiText,
-                    audio_url: audioUrl,
-                    audio_duration_seconds: estimatedSeconds,
-                    is_fallback: isFallback,
-                    voice_generated: voiceData.generated || false,
-                    voice_fallback: voiceData.fallback || false,
+                    sender_type: "user",
+                    text,
                 })
                 .select()
                 .single();
 
-            if (typeof voiceData.secondsRemaining === "number") {
-                setRemainingSeconds(voiceData.secondsRemaining);
+            if (savedUserMessage) {
+                setMessages((prev) => [...prev, savedUserMessage]);
             }
-
-            if (savedAiMessage) {
-                setMessages((prev) => [...prev, savedAiMessage]);
-                playSoftPing();
-            }
-
+        } catch (error) {
+            console.error("Failed to send message:", error);
+            sendingRef.current = false;
             setIsTyping(false);
-            inputRef.current?.focus();
+            return;
+        }
+
+        setTimeout(async () => {
+            try {
+                buildCreatorSafetyPrompt();
+
+                const {
+                    data: { session: chatSession },
+                } = await supabase.auth.getSession();
+
+                const recentMessages = messages
+                    .slice(-8)
+                    .map((message) => ({
+                        role: message.sender_type === "user" ? "user" : "assistant",
+                        content: message.text,
+                    }));
+
+                const aiResponse = await fetch("/api/chat", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${chatSession?.access_token}`,
+                    },
+                    body: JSON.stringify({
+                        message: text,
+                        creatorName: creator.display_name,
+                        creatorTagline: creator.tagline,
+                        creatorStyle: creator.personality_prompt,
+                        recentMessages,
+                    }),
+                });
+
+                const aiData = await aiResponse.json();
+                const isFallback = aiData.fallback || false;
+                const aiText = aiData.reply || "Tell me more.";
+                const wordCount = aiText.trim().split(/\s+/).length;
+
+                const estimatedSeconds = Math.min(
+                    30,
+                    Math.max(3, Math.ceil(wordCount / 2.5))
+                );
+
+                const voiceText =
+                    aiText.length > 500
+                        ? `${aiText.slice(0, 500)}...`
+                        : aiText;
+
+                const {
+                    data: { session },
+                } = await supabase.auth.getSession();
+
+                const voiceResponse = await fetch("/api/voice", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${session?.access_token}`,
+                    },
+                    body: JSON.stringify({
+                        text: voiceText,
+                        voiceId: creator.voice_id,
+                        estimatedSeconds,
+                    }),
+                });
+
+                const voiceData = await voiceResponse.json();
+                const audioUrl = voiceData.audio
+                    ? `data:${voiceData.mimeType};base64,${voiceData.audio}`
+                    : voiceData.audioUrl || "/mock-voice.mp3";
+
+                const { data: savedAiMessage } = await supabase
+                    .from("messages")
+                    .insert({
+                        conversation_id: conversationId,
+                        sender_type: "ai",
+                        text: aiText,
+                        audio_url: audioUrl,
+                        audio_duration_seconds: estimatedSeconds,
+                        is_fallback: isFallback,
+                        voice_generated: voiceData.generated || false,
+                        voice_fallback: voiceData.fallback || false,
+                    })
+                    .select()
+                    .single();
+
+                if (typeof voiceData.secondsRemaining === "number") {
+                    setRemainingSeconds(voiceData.secondsRemaining);
+                }
+
+                if (savedAiMessage) {
+                    setMessages((prev) => [...prev, savedAiMessage]);
+                    playSoftPing();
+                }
+
+                inputRef.current?.focus();
+            } catch (error) {
+                console.error("Failed to generate AI reply:", error);
+            } finally {
+                sendingRef.current = false;
+                setIsTyping(false);
+            }
         }, 900);
     }
 
@@ -399,6 +423,13 @@ export default function ChatPage({
     const hasUserMessages = messages.some(
         (message) => message.sender_type === "user"
     );
+    const isWaitingForReply =
+        isTyping ||
+        messages[messages.length - 1]?.sender_type === "user";
+    const canReplayAudio =
+        subscriptionStatus === "active" ||
+        remainingSeconds > 0 ||
+        hasPaidBefore;
 
     return (
         <main className="min-h-screen bg-black text-white flex flex-col">
@@ -465,9 +496,9 @@ export default function ChatPage({
                             ].map((reply) => (
                                 <button
                                     key={reply}
-                                    disabled={isTyping}
+                                    disabled={isWaitingForReply}
                                     onClick={() => useSuggestedReply(reply)}
-                                    className={`bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-zinc-200 ${isTyping ? "opacity-50 cursor-not-allowed" : ""
+                                    className={`bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 text-sm text-zinc-200 ${isWaitingForReply ? "opacity-50 cursor-not-allowed" : ""
                                         }`}
                                 >
                                     💬 {reply}
@@ -507,7 +538,12 @@ export default function ChatPage({
                                     </div>
                                 )}
 
-                                <p className="text-sm text-zinc-300 leading-relaxed">
+                                <p
+                                    className={`text-sm leading-relaxed ${message.sender_type === "user"
+                                        ? "text-black"
+                                        : "text-zinc-300"
+                                        }`}
+                                >
                                     {expandedMessages.includes(message.id)
                                         ? message.text
                                         : message.text.length > 140
@@ -532,7 +568,7 @@ export default function ChatPage({
                                 )}
 
                             {message.audio_url && (
-                                subscriptionStatus === "active" || remainingSeconds > 0 ? (
+                                canReplayAudio ? (
                                     <AudioPlayer audioUrl={message.audio_url} />
                                 ) : (
                                     <button
@@ -549,7 +585,7 @@ export default function ChatPage({
                                                     Voice locked
                                                 </p>
                                                 <p className="text-xs text-zinc-500">
-                                                    Continue to keep listening
+                                                    Upgrade to keep listening
                                                 </p>
                                             </div>
                                         </div>
@@ -590,12 +626,12 @@ export default function ChatPage({
             <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-800 bg-black/95 backdrop-blur p-4">
                 <div className="flex gap-3">
                     <input
-                        disabled={isTyping}
+                        disabled={isWaitingForReply}
                         ref={inputRef}
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => {
-                            if (e.key === "Enter" && !isTyping) {
+                            if (e.key === "Enter" && !isWaitingForReply) {
                                 sendMessage();
                             }
                         }}
@@ -604,9 +640,9 @@ export default function ChatPage({
                     />
 
                     <button
-                        disabled={isTyping}
+                        disabled={isWaitingForReply}
                         onClick={() => sendMessage()}
-                        className={`px-5 rounded-2xl font-semibold transition ${isTyping
+                        className={`px-5 rounded-2xl font-semibold transition ${isWaitingForReply
                             ? "bg-zinc-700 text-zinc-400"
                             : "bg-white text-black"
                             }`}

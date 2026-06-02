@@ -4,10 +4,22 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const userId = body.userId;
+    const authHeader = request.headers.get("authorization");
+    const token = authHeader?.replace("Bearer ", "");
 
-    if (!userId) {
+    if (!token) {
+      return NextResponse.json(
+        { error: "Unauthorized" },
+        { status: 401 }
+      );
+    }
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAdmin.auth.getUser(token);
+
+    if (authError || !user) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
@@ -17,12 +29,12 @@ export async function POST(request: Request) {
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("stripe_customer_id")
-      .eq("id", userId)
+      .eq("id", user.id)
       .single();
 
     if (!profile?.stripe_customer_id) {
       return NextResponse.json(
-        { error: "No Stripe customer found" },
+        { error: "No billing account yet" },
         { status: 400 }
       );
     }

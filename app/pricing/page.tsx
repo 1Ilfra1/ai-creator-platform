@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -7,6 +8,43 @@ type Plan = "starter" | "premium" | "vip";
 
 export default function PricingPage() {
   const router = useRouter();
+  const topupRef = useRef<HTMLDivElement | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState("free");
+
+  useEffect(() => {
+    async function loadProfile() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("subscription_status")
+        .eq("id", user.id)
+        .single();
+
+      if (profile) {
+        setSubscriptionStatus(
+          profile.subscription_status || "free"
+        );
+      }
+    }
+
+    loadProfile();
+
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.get("mode") === "topup") {
+      setTimeout(() => {
+        topupRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100);
+    }
+  }, []);
 
   async function buyPlan(plan: Plan) {
     const {
@@ -72,6 +110,14 @@ export default function PricingPage() {
     }
   }
 
+  const pricingContext =
+    subscriptionStatus === "active"
+      ? "Add extra minutes or manage your monthly plan from Profile."
+      : subscriptionStatus === "canceled" ||
+        subscriptionStatus === "past_due"
+        ? "Reactivate a plan or add minutes anytime."
+        : "Choose a monthly plan or add minutes anytime.";
+
   return (
     <main className="min-h-screen bg-black text-white p-6 flex items-center justify-center">
       <div className="max-w-md w-full">
@@ -87,7 +133,7 @@ export default function PricingPage() {
         </h1>
 
         <p className="text-zinc-500 mb-8">
-          Keep listening to creator voice replies and stay connected 💜
+          {pricingContext}
         </p>
 
         <div className="space-y-4 mb-4">
@@ -169,7 +215,10 @@ export default function PricingPage() {
           </div>
         </div>
 
-        <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5 mb-4">
+        <div
+          ref={topupRef}
+          className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5 mb-4 scroll-mt-6"
+        >
           <h3 className="font-semibold mb-4">
             Need more voice minutes?
           </h3>

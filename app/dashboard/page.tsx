@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 import { supabase } from "@/lib/supabase";
 
 export default function DashboardPage() {
+    const router = useRouter();
 
     const [loading, setLoading] = useState(true);
 
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [creatorId, setCreatorId] = useState<string | null>(null);
     const [isPublished, setIsPublished] = useState(false);
     const [username, setUsername] = useState("");
@@ -23,12 +26,15 @@ export default function DashboardPage() {
     const [uploadingBannerImage, setUploadingBannerImage] = useState(false);
     const [tagline, setTagline] = useState("");
     const [personalityPrompt, setPersonalityPrompt] = useState("");
+    const usernameValid = /^[a-zA-Z0-9_-]{3,30}$/.test(username.trim());
     const profileComplete =
-        displayName &&
-        tagline &&
-        personalityPrompt &&
+        usernameValid &&
+        displayName.trim() &&
+        tagline.trim() &&
+        personalityPrompt.trim() &&
         profileImage &&
-        introAudio;
+        introAudio &&
+        voiceId.trim();
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
     const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
 
@@ -41,85 +47,51 @@ export default function DashboardPage() {
     const ALLOWED_AUDIO_TYPES = [
         "audio/mpeg",
         "audio/mp3",
-        "audio/wav",
-        "audio/x-wav",
-        "audio/mp4",
-        "audio/m4a",
-        "audio/aac",
     ];
 
     useEffect(() => {
 
         async function loadCreator() {
+            try {
 
-            const {
-                data: { user },
-            } = await supabase.auth.getUser();
+                const {
+                    data: { user },
+                } = await supabase.auth.getUser();
 
-            if (!user) return;
-
-            const { data } = await supabase
-                .from("creators")
-                .select("*")
-                .eq("user_id", user.id)
-                .maybeSingle();
-
-            let creator = data;
-
-            if (!creator) {
-
-                const emailPrefix =
-                    user.email?.split("@")[0] || "creator";
-
-                const generatedUsername =
-                    `${emailPrefix}-${Math.floor(Math.random() * 10000)}`;
-
-                const { data: newCreator, error } = await supabase
-                    .from("creators")
-                    .insert({
-                        user_id: user.id,
-                        username: generatedUsername,
-                        display_name: "New Creator",
-                        tagline: "Creator description",
-                    })
-                    .select()
-                    .single();
-
-                if (error) {
-                    console.error(error);
+                if (!user) {
+                    router.replace("/login");
                     return;
                 }
 
-                creator = newCreator;
+                setCurrentUserId(user.id);
+
+                const { data } = await supabase
+                    .from("creators")
+                    .select("*")
+                    .eq("user_id", user.id)
+                    .maybeSingle();
+
+                if (data) {
+
+                    setCreatorId(data.id);
+
+                    setUsername(data.username || "");
+                    setDisplayName(data.display_name || "");
+                    setTagline(data.tagline || "");
+                    setPersonalityPrompt(
+                        data.personality_prompt || ""
+                    );
+                    setIsPublished(data.is_published || false);
+                    setProfileImage(data.profile_image || "");
+                    setBannerImage(data.banner_image || "");
+                    setIntroAudio(data.intro_audio || "");
+                    setVoiceId(data.voice_id || "");
+                }
+            } catch (error) {
+                console.error("Failed to load creator:", error);
+            } finally {
+                setLoading(false);
             }
-
-            if (creator) {
-
-                setCreatorId(creator.id);
-
-                setUsername(creator.username || "");
-                setDisplayName(creator.display_name || "");
-                setTagline(creator.tagline || "");
-                setPersonalityPrompt(
-                    creator.personality_prompt || ""
-                );
-                setIsPublished(creator.is_published || false);
-                setProfileImage(creator.profile_image || "");
-                setBannerImage(creator.banner_image || "");
-                setIntroAudio(creator.intro_audio || "");
-                setVoiceId(creator.voice_id || "");
-            }
-
-            if (data) {
-                setCreatorId(data.id);
-
-                setUsername(data.username || "");
-                setDisplayName(data.display_name || "");
-                setTagline(data.tagline || "");
-                setPersonalityPrompt(data.personality_prompt || "");
-            }
-
-            setLoading(false);
         }
 
         loadCreator();
@@ -131,15 +103,19 @@ export default function DashboardPage() {
     ) {
         const file = event.target.files?.[0];
 
-        if (!file || !creatorId) return;
+        if (!file || !currentUserId) return;
 
         if (file.size > MAX_AUDIO_SIZE) {
             alert("Audio file too large.");
             return;
         }
 
-        if (!ALLOWED_AUDIO_TYPES.includes(file.type)) {
-            alert("Unsupported audio format.");
+        const isMp3File =
+            ALLOWED_AUDIO_TYPES.includes(file.type) ||
+            file.name.toLowerCase().endsWith(".mp3");
+
+        if (!isMp3File) {
+            alert("Please upload an MP3 file.");
             return;
         }
 
@@ -149,7 +125,7 @@ export default function DashboardPage() {
             const fileExt = file.name.split(".").pop();
 
             const fileName =
-                `${creatorId}-${Date.now()}.${fileExt}`;
+                `${creatorId || currentUserId}-${Date.now()}.${fileExt}`;
 
             const { error } = await supabase.storage
                 .from("creator-intros")
@@ -183,7 +159,7 @@ export default function DashboardPage() {
     ) {
         const file = event.target.files?.[0];
 
-        if (!file || !creatorId) return;
+        if (!file || !currentUserId) return;
 
         if (file.size > MAX_IMAGE_SIZE) {
             alert("Image file too large.");
@@ -203,7 +179,7 @@ export default function DashboardPage() {
             }
 
             const fileExt = file.name.split(".").pop();
-            const fileName = `${creatorId}-${type}-${Date.now()}.${fileExt}`;
+            const fileName = `${creatorId || currentUserId}-${type}-${Date.now()}.${fileExt}`;
 
             const { error } = await supabase.storage
                 .from("creator-assets")
@@ -259,29 +235,50 @@ export default function DashboardPage() {
 
     async function saveProfile() {
 
-        if (!creatorId) return;
+        if (!currentUserId) return;
 
-        const { error } = await supabase
-            .from("creators")
-            .update({
-                username,
-                display_name: displayName,
-                tagline,
-                personality_prompt: personalityPrompt,
-                profile_image: profileImage,
-                banner_image: bannerImage,
-                intro_audio: introAudio,
-                voice_id: voiceId,
-            })
-            .eq("id", creatorId);
-
-        if (error) {
-            console.error(error);
-            alert("Failed to save profile.");
+        if (!profileComplete) {
+            alert("Complete all required creator profile fields first.");
             return;
         }
 
-        alert("Profile updated!");
+        const creatorPayload = {
+            user_id: currentUserId,
+            username: username.trim(),
+            display_name: displayName.trim(),
+            tagline: tagline.trim(),
+            personality_prompt: personalityPrompt.trim(),
+            profile_image: profileImage,
+            banner_image: bannerImage,
+            intro_audio: introAudio,
+            voice_id: voiceId.trim(),
+        };
+
+        const { data, error } = creatorId
+            ? await supabase
+                .from("creators")
+                .update(creatorPayload)
+                .eq("id", creatorId)
+                .select("id")
+                .single()
+            : await supabase
+                .from("creators")
+                .insert(creatorPayload)
+                .select("id")
+                .single();
+
+        if (error) {
+            console.error(error);
+            alert("Failed to save creator profile.");
+            return;
+        }
+
+        if (data) {
+            setCreatorId(data.id);
+        }
+
+        alert("Creator profile saved!");
+        router.push("/profile");
     }
 
     if (loading) {
@@ -302,7 +299,7 @@ export default function DashboardPage() {
                 </h1>
 
                 <p className="text-zinc-500 mb-8">
-                    Build your creator presence, voice, and fan experience.
+                    Set up your creator profile so fans can find you and start chatting.
                 </p>
 
                 <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden mb-8">
@@ -372,6 +369,9 @@ export default function DashboardPage() {
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
                             placeholder="luna"
                         />
+                        <p className="text-xs text-zinc-500 mt-2">
+                            3-30 characters. Use letters, numbers, underscores, or dashes.
+                        </p>
                     </div>
 
                     <div>
@@ -403,9 +403,6 @@ export default function DashboardPage() {
                     <div>
                         <label className="block text-sm mb-2">
                             Creator vibe & style
-                            <span className="text-zinc-500 font-normal">
-                                {" "}— hidden from fans
-                            </span>
                         </label>
 
                         <p className="text-xs text-zinc-500 mb-2">
@@ -413,7 +410,7 @@ export default function DashboardPage() {
                         </p>
 
                         <p className="text-xs text-zinc-500 mb-2">
-                            ⚠️ This shapes how your AI starts conversations. Fans will not see this text.
+                            ⚠️ Fans will not see this text.
                         </p>
 
                         <textarea
@@ -430,15 +427,22 @@ export default function DashboardPage() {
                     </div>
                     <div>
                         <label className="block text-sm mb-2">
-                            Profile image
+                            Profile image (JPG, PNG, WebP)
                         </label>
 
                         <input
+                            id="profile-image-upload"
                             type="file"
-                            accept="image/*"
+                            accept="image/jpeg,image/png,image/webp"
                             onChange={(e) => uploadCreatorAsset(e, "profile")}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
+                            className="sr-only"
                         />
+                        <label
+                            htmlFor="profile-image-upload"
+                            className="inline-flex bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 font-semibold cursor-pointer"
+                        >
+                            Choose file
+                        </label>
 
                         {uploadingProfileImage && (
                             <p className="text-sm text-zinc-500 mt-2">
@@ -455,15 +459,22 @@ export default function DashboardPage() {
 
                     <div>
                         <label className="block text-sm mb-2">
-                            Banner image
+                            Banner image (JPG, PNG, WebP)
                         </label>
 
                         <input
+                            id="banner-image-upload"
                             type="file"
-                            accept="image/*"
+                            accept="image/jpeg,image/png,image/webp"
                             onChange={(e) => uploadCreatorAsset(e, "banner")}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
+                            className="sr-only"
                         />
+                        <label
+                            htmlFor="banner-image-upload"
+                            className="inline-flex bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 font-semibold cursor-pointer"
+                        >
+                            Choose file
+                        </label>
 
                         {uploadingBannerImage && (
                             <p className="text-sm text-zinc-500 mt-2">
@@ -480,7 +491,7 @@ export default function DashboardPage() {
 
                     <div>
                         <label className="block text-sm mb-2">
-                            Intro voice message
+                            Intro voice message (MP3)
                         </label>
 
                         <p className="text-xs text-zinc-500 mb-3">
@@ -489,11 +500,18 @@ export default function DashboardPage() {
                         </p>
 
                         <input
+                            id="intro-audio-upload"
                             type="file"
-                            accept="audio/*"
+                            accept="audio/mpeg,.mp3"
                             onChange={uploadIntroAudio}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
+                            className="sr-only"
                         />
+                        <label
+                            htmlFor="intro-audio-upload"
+                            className="inline-flex bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 font-semibold cursor-pointer"
+                        >
+                            Choose file
+                        </label>
 
                         {uploadingAudio && (
                             <p className="text-sm text-zinc-500 mt-2">
@@ -538,45 +556,12 @@ export default function DashboardPage() {
                         </div>
                     </div>
 
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 mb-8">
-                        <h2 className="text-lg font-semibold mb-2">
-                            Share your creator profile
-                        </h2>
-
-                        <p className="text-sm text-zinc-500 mb-4">
-                            Copy your public link and share it in stories, bio, or DMs.
-                        </p>
-
-                        <button
-                            onClick={async () => {
-                                const link = `${window.location.origin}/creator/${username}`;
-
-                                await navigator.clipboard.writeText(link);
-
-                                alert("Profile link copied!");
-                            }}
-                            className="w-full bg-white text-black py-4 rounded-2xl font-bold"
-                        >
-                            Copy profile link
-                        </button>
-
-                        <div className="mt-4 bg-zinc-950 border border-zinc-800 rounded-2xl p-4">
-                            <p className="text-xs text-zinc-500 mb-2">
-                                Share tip
-                            </p>
-
-                            <p className="text-sm text-zinc-300 leading-relaxed">
-                                “Chat with my AI voice 💜”
-                            </p>
-                        </div>
-                    </div>
-
-
                     <button
                         onClick={saveProfile}
-                        className="w-full bg-white text-black py-4 rounded-2xl font-bold"
+                        disabled={!profileComplete}
+                        className="w-full bg-white text-black py-4 rounded-2xl font-bold disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                        Save profile
+                        {creatorId ? "Update creator profile" : "Create creator profile"}
                     </button>
 
                     {!profileComplete && (
@@ -586,11 +571,13 @@ export default function DashboardPage() {
                             </h3>
 
                             <div className="space-y-2 text-sm">
-                                <p>{displayName ? "✅" : "⬜"} Display name</p>
-                                <p>{tagline ? "✅" : "⬜"} Creator description</p>
-                                <p>{personalityPrompt ? "✅" : "⬜"} Personality setup</p>
+                                <p>{usernameValid ? "✅" : "⬜"} Username</p>
+                                <p>{displayName.trim() ? "✅" : "⬜"} Display name</p>
+                                <p>{tagline.trim() ? "✅" : "⬜"} Creator description</p>
+                                <p>{personalityPrompt.trim() ? "✅" : "⬜"} Personality setup</p>
                                 <p>{profileImage ? "✅" : "⬜"} Profile image</p>
                                 <p>{introAudio ? "✅" : "⬜"} Intro voice message</p>
+                                <p>{voiceId.trim() ? "✅" : "⬜"} ElevenLabs voice ID</p>
                             </div>
                         </div>
                     )}

@@ -5,6 +5,8 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 const MAX_VOICE_TEXT_LENGTH = 500;
 
 export async function POST(request: Request) {
+  let lockedUserId: string | null = null;
+
   try {
     const authHeader = request.headers.get("authorization");
     const token = authHeader?.replace("Bearer ", "");
@@ -108,11 +110,13 @@ export async function POST(request: Request) {
       });
 
     if (lockError) {
-      return NextResponse.json(
-        { error: "Voice generation already in progress" },
-        { status: 429 }
-      );
+      return NextResponse.json({
+        audioUrl: "/mock-voice.mp3",
+        fallback: true,
+      });
     }
+
+    lockedUserId = user.id;
 
     const elevenlabs = new ElevenLabsClient({ apiKey });
 
@@ -171,6 +175,8 @@ export async function POST(request: Request) {
       .delete()
       .eq("user_id", user.id);
 
+    lockedUserId = null;
+
     return NextResponse.json({
       audioUrl: data.publicUrl,
       generated: true,
@@ -178,6 +184,13 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Voice generation failed:", error);
+
+    if (lockedUserId) {
+      await supabaseAdmin
+        .from("voice_generation_locks")
+        .delete()
+        .eq("user_id", lockedUserId);
+    }
 
     return NextResponse.json({
       audioUrl: "/mock-voice.mp3",

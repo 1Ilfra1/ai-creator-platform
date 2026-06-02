@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { supabase } from "@/lib/supabase";
 
@@ -28,6 +29,7 @@ export default function CreatorProfilePage({
 }) {
 
     const { username } = use(params);
+    const router = useRouter();
 
     const [creator, setCreator] = useState<Creator | null>(null);
 
@@ -159,7 +161,7 @@ export default function CreatorProfilePage({
 
                 <button
                     onClick={() => {
-                        window.location.href = `/chat/${creator.username}`;
+                        router.push(`/chat/${creator.username}`);
                     }}
                     className="w-full bg-white text-black py-4 rounded-3xl font-bold text-lg shadow-2xl active:scale-[0.99] transition"
                 >

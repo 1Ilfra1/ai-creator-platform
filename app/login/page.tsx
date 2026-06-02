@@ -1,12 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
+  const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  function getSafeNextPath() {
+    if (typeof window === "undefined") {
+      return "/profile";
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const next = params.get("next");
+
+    if (next && next.startsWith("/") && !next.startsWith("//")) {
+      return next;
+    }
+
+    return "/profile";
+  }
+
+  useEffect(() => {
+    async function redirectIfLoggedIn() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session?.user) {
+        router.replace(getSafeNextPath());
+      }
+    }
+
+    redirectIfLoggedIn();
+  }, [router]);
 
   async function signUp() {
 
@@ -35,7 +66,22 @@ export default function LoginPage() {
       return;
     }
 
-    alert("Logged in!");
+    router.replace(getSafeNextPath());
+  }
+
+  async function signInWithGoogle() {
+    const nextPath = getSafeNextPath();
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/login?next=${encodeURIComponent(nextPath)}`,
+      },
+    });
+
+    if (error) {
+      alert(error.message);
+    }
   }
 
   return (
@@ -70,6 +116,13 @@ export default function LoginPage() {
             className="w-full bg-white text-black p-3 rounded-xl font-semibold"
           >
             Login
+          </button>
+
+          <button
+            onClick={signInWithGoogle}
+            className="w-full bg-zinc-100 text-black p-3 rounded-xl font-semibold"
+          >
+            Continue with Google
           </button>
 
           <button

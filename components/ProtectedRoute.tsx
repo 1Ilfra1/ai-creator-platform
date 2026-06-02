@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 export default function ProtectedRoute({
@@ -8,7 +9,10 @@ export default function ProtectedRoute({
 }: {
   children: React.ReactNode;
 }) {
-  const [checked, setChecked] = useState(false);
+  const router = useRouter();
+
+  const [checking, setChecking] = useState(true);
+  const [allowed, setAllowed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -22,40 +26,42 @@ export default function ProtectedRoute({
         if (cancelled) return;
 
         if (!session?.user) {
-          window.location.href = "/login";
+          setAllowed(false);
+          setChecking(false);
+          router.replace("/login");
           return;
         }
 
-        setChecked(true);
+        setAllowed(true);
+        setChecking(false);
       } catch (error) {
         console.error("Protected route check failed:", error);
 
         if (!cancelled) {
-          setChecked(true);
+          setAllowed(false);
+          setChecking(false);
+          router.replace("/login");
         }
       }
     }
 
     checkUser();
 
-    const timeout = setTimeout(() => {
-      if (!cancelled) {
-        setChecked(true);
-      }
-    }, 2000);
-
     return () => {
       cancelled = true;
-      clearTimeout(timeout);
     };
   }, []);
 
-  if (!checked) {
+  if (checking) {
     return (
       <main className="min-h-screen bg-black text-white flex items-center justify-center">
         Loading...
       </main>
     );
+  }
+
+  if (!allowed) {
+    return null;
   }
 
   return <>{children}</>;
