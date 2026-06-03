@@ -1,12 +1,12 @@
 "use client";
 
-import { Creator } from "@/types/creator";
+import { PublicCreator } from "@/types/creator";
 import { useRouter } from "next/navigation";
 
 export default function CreatorCard({
   creator,
 }: {
-  creator: Creator;
+  creator: PublicCreator;
 }) {
   const router = useRouter();
 

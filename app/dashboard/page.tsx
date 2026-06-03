@@ -33,6 +33,7 @@ export default function DashboardPage() {
         tagline.trim() &&
         personalityPrompt.trim() &&
         profileImage &&
+        bannerImage &&
         introAudio &&
         voiceId.trim();
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -576,6 +577,7 @@ export default function DashboardPage() {
                                 <p>{tagline.trim() ? "✅" : "⬜"} Creator description</p>
                                 <p>{personalityPrompt.trim() ? "✅" : "⬜"} Personality setup</p>
                                 <p>{profileImage ? "✅" : "⬜"} Profile image</p>
+                                <p>{bannerImage ? "✅" : "⬜"} Banner image</p>
                                 <p>{introAudio ? "✅" : "⬜"} Intro voice message</p>
                                 <p>{voiceId.trim() ? "✅" : "⬜"} ElevenLabs voice ID</p>
                             </div>

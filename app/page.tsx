@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 
-import { Creator } from "@/types/creator";
+import { PublicCreator } from "@/types/creator";
 import { getCreators } from "@/services/creators";
 
 import CreatorCard from "@/components/creator/CreatorCard";
 import BottomNav from "@/components/navigation/BottomNav";
 
 export default function HomePage() {
-  const [creators, setCreators] = useState<Creator[]>([]);
+  const [creators, setCreators] = useState<PublicCreator[]>([]);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
