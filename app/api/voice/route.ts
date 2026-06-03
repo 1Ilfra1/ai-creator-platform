@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     const text = String(body.text || "").slice(0, MAX_VOICE_TEXT_LENGTH);
-    const voiceId = body.voiceId;
+    const conversationId = body.conversationId;
     const estimatedSeconds = Math.max(
       1,
       Math.min(60, Number(body.estimatedSeconds || 3))
@@ -73,6 +73,33 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    if (!conversationId) {
+      return NextResponse.json(
+        { error: "Conversation required" },
+        { status: 400 }
+      );
+    }
+
+    const { data: conversation } = await supabaseAdmin
+      .from("conversations")
+      .select("creator_id")
+      .eq("id", conversationId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (!conversation) {
+      return NextResponse.json(
+        { error: "Forbidden" },
+        { status: 403 }
+      );
+    }
+
+    const { data: creator } = await supabaseAdmin
+      .from("creators")
+      .select("voice_id")
+      .eq("id", conversation.creator_id)
+      .single();
 
     const { data: profile } = await supabaseAdmin
       .from("profiles")
@@ -87,7 +114,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!voiceId) {
+    if (!creator?.voice_id) {
       return NextResponse.json({
         audioUrl: "/mock-voice.mp3",
         mock: true,
@@ -120,7 +147,7 @@ export async function POST(request: Request) {
 
     const elevenlabs = new ElevenLabsClient({ apiKey });
 
-    const audio = await elevenlabs.textToSpeech.convert(voiceId, {
+    const audio = await elevenlabs.textToSpeech.convert(creator.voice_id, {
       text,
       model_id: "eleven_multilingual_v2",
     });

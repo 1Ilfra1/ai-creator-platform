@@ -25,7 +25,6 @@ interface Creator {
     profile_image: string | null;
     personality_prompt: string | null;
     intro_audio: string | null;
-    voice_id: string | null;
 }
 
 export default function ChatPage({
@@ -83,7 +82,7 @@ export default function ChatPage({
 
             const { data: creatorData, error: creatorError } = await supabase
                 .from("creators")
-                .select("id, username, display_name, tagline, profile_image, personality_prompt, intro_audio, voice_id")
+                .select("id, username, display_name, tagline, profile_image, personality_prompt, intro_audio")
                 .eq("username", username)
                 .single();
 
@@ -343,7 +342,7 @@ export default function ChatPage({
                     },
                     body: JSON.stringify({
                         text: voiceText,
-                        voiceId: creator.voice_id,
+                        conversationId,
                         estimatedSeconds,
                     }),
                 });
