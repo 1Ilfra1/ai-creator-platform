@@ -14,6 +14,7 @@ export default function ProfilePage() {
   const [seconds, setSeconds] = useState(0);
   const [subscriptionStatus, setSubscriptionStatus] = useState("free");
   const [creatorUsername, setCreatorUsername] = useState("");
+  const [creatorReadyUnpublished, setCreatorReadyUnpublished] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameDraft, setUsernameDraft] = useState("");
 
@@ -44,19 +45,25 @@ export default function ProfilePage() {
         const { data: creator } = await supabase
           .from("creators")
           .select(
-            "username, display_name, tagline, personality_prompt, voice_id"
+            "username, display_name, tagline, personality_prompt, voice_id, is_published"
           )
           .eq("user_id", user.id)
           .maybeSingle();
 
-        if (
+        const creatorComplete = Boolean(
           creator?.username &&
           creator.display_name &&
           creator.tagline &&
           creator.personality_prompt &&
           creator.voice_id
-        ) {
+        );
+
+        if (creator && creatorComplete && creator.is_published) {
           setCreatorUsername(creator.username || "");
+          setCreatorReadyUnpublished(false);
+        } else if (creatorComplete) {
+          setCreatorUsername("");
+          setCreatorReadyUnpublished(true);
         }
       }
     }
@@ -213,6 +220,23 @@ export default function ProfilePage() {
                   View profile
                 </button>
               </div>
+            </div>
+          )}
+
+          {creatorReadyUnpublished && (
+            <div className="bg-yellow-950/30 border border-yellow-900 rounded-2xl p-4 mb-4">
+              <p className="text-sm text-yellow-300 font-semibold mb-2">
+                Your creator profile is ready but not published yet.
+              </p>
+
+              <button
+                onClick={() => {
+                  router.push("/dashboard");
+                }}
+                className="w-full bg-white text-black p-3 rounded-2xl font-bold"
+              >
+                Go to Creator Studio to publish
+              </button>
             </div>
           )}
 

@@ -24,6 +24,7 @@ export default function DashboardPage() {
     const [uploadingAudio, setUploadingAudio] = useState(false);
     const [uploadingProfileImage, setUploadingProfileImage] = useState(false);
     const [uploadingBannerImage, setUploadingBannerImage] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState("");
     const [tagline, setTagline] = useState("");
     const [personalityPrompt, setPersonalityPrompt] = useState("");
     const usernameValid = /^[a-zA-Z0-9_-]{3,30}$/.test(username.trim());
@@ -228,6 +229,7 @@ export default function DashboardPage() {
         }
 
         setIsPublished(true);
+        setSaveSuccess("");
 
         alert("Profile published!");
     }
@@ -276,8 +278,7 @@ export default function DashboardPage() {
             setCreatorId(data.id);
         }
 
-        alert("Creator profile saved!");
-        router.push("/profile");
+        setSaveSuccess("Creator profile saved. You can publish it when you are ready.");
     }
 
     if (loading) {
@@ -563,6 +564,14 @@ export default function DashboardPage() {
                         {creatorId ? "Update creator profile" : "Create creator profile"}
                     </button>
 
+                    {saveSuccess && (
+                        <div className="border border-green-900 bg-green-950/30 rounded-3xl p-5">
+                            <p className="font-semibold text-green-300">
+                                {saveSuccess}
+                            </p>
+                        </div>
+                    )}
+
                     {!profileComplete && (
                         <div className="border border-yellow-900 bg-yellow-950/30 rounded-3xl p-5">
                             <h3 className="font-semibold text-yellow-300 mb-3">
@@ -589,20 +598,32 @@ export default function DashboardPage() {
                         </div>
                     )}
 
-                    {!isPublished && profileComplete && (
-                        <button
-                            onClick={publishProfile}
-                            className="w-full bg-zinc-800 text-white py-4 rounded-2xl font-bold mt-3"
-                        >
-                            Publish profile
-                        </button>
+                    {creatorId && !isPublished && profileComplete && (
+                        <div className="border border-green-900 bg-green-950/30 rounded-3xl p-5">
+                            <h3 className="font-semibold text-green-300 mb-2">
+                                Ready to publish
+                            </h3>
+
+                            <p className="text-sm text-zinc-400 mb-4">
+                                Publish your profile so fans can find it and start chatting.
+                            </p>
+
+                            <button
+                                onClick={publishProfile}
+                                className="w-full bg-white text-black py-4 rounded-2xl font-bold"
+                            >
+                                Publish profile
+                            </button>
+                        </div>
                     )}
 
                     {isPublished && (
-                        <div className="mt-4 flex items-center gap-2 text-sm text-green-400">
-                            <div className="w-2 h-2 rounded-full bg-green-400" />
+                        <div className="border border-green-900 bg-green-950/30 rounded-3xl p-5">
+                            <div className="flex items-center gap-2 text-sm text-green-400">
+                                <div className="w-2 h-2 rounded-full bg-green-400" />
 
-                            <span>Ready</span>
+                                <span>Published and live</span>
+                            </div>
                         </div>
                     )}
                 </div>

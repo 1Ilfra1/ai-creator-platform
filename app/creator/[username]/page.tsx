@@ -33,6 +33,8 @@ export default function CreatorProfilePage({
 
     const [creator, setCreator] = useState<Creator | null>(null);
 
+    const [loading, setLoading] = useState(true);
+
     const [showFullBio, setShowFullBio] = useState(false);
 
     useEffect(() => {
@@ -48,16 +50,40 @@ export default function CreatorProfilePage({
                 .single();
 
             setCreator(data);
+            setLoading(false);
         }
 
         loadCreator();
 
     }, [username]);
 
-    if (!creator) {
+    if (loading) {
         return (
             <main className="min-h-screen bg-black text-white flex items-center justify-center">
                 Loading creator...
+            </main>
+        );
+    }
+
+    if (!creator) {
+        return (
+            <main className="min-h-screen bg-black text-white flex items-center justify-center p-6 text-center">
+                <div className="max-w-sm">
+                    <h1 className="text-2xl font-bold mb-3">
+                        Creator profile is not available
+                    </h1>
+
+                    <p className="text-zinc-500 mb-6">
+                        This creator may not be published yet, or the link may be incorrect.
+                    </p>
+
+                    <button
+                        onClick={() => router.push("/")}
+                        className="w-full bg-white text-black py-4 rounded-3xl font-bold"
+                    >
+                        Explore creators
+                    </button>
+                </div>
             </main>
         );
     }
