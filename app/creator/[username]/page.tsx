@@ -40,7 +40,7 @@ export default function CreatorProfilePage({
         async function loadCreator() {
 
             const { data } = await supabase
-                .from("creators")
+                .from("public_creators")
                 .select("id, username, display_name, tagline, bio, tags, topics, profile_image, banner_image, intro_audio, is_active, is_published")
                 .eq("username", username)
                 .eq("is_active", true)

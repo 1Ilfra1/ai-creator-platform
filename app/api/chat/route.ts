@@ -117,10 +117,38 @@ export async function POST(request: Request) {
         ? rawMessage.slice(0, MAX_MESSAGE_LENGTH)
         : rawMessage;
 
-    const creatorName = body.creatorName || "Creator";
-    const creatorTagline = body.creatorTagline || "";
-    const creatorStyle = body.creatorStyle || "";
     const conversationId = body.conversationId;
+
+    if (!conversationId) {
+      return NextResponse.json(
+        { error: "Conversation required" },
+        { status: 400 }
+      );
+    }
+
+    const { data: conversation } = await supabaseAdmin
+      .from("conversations")
+      .select("creator_id")
+      .eq("id", conversationId)
+      .eq("user_id", user.id)
+      .single();
+
+    if (!conversation) {
+      return NextResponse.json(
+        { error: "Forbidden" },
+        { status: 403 }
+      );
+    }
+
+    const { data: creator } = await supabaseAdmin
+      .from("creators")
+      .select("display_name, tagline, personality_prompt")
+      .eq("id", conversation.creator_id)
+      .single();
+
+    const creatorName = creator?.display_name || "Creator";
+    const creatorTagline = creator?.tagline || "";
+    const creatorStyle = creator?.personality_prompt || "";
 
     const recentMessages = Array.isArray(body.recentMessages)
       ? body.recentMessages
@@ -138,19 +166,17 @@ export async function POST(request: Request) {
 
     let memoryText = "";
 
-    if (conversationId) {
-      const { data: memories } = await supabaseAdmin
-        .from("conversation_memories")
-        .select("memory")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: false })
-        .limit(5);
+    const { data: memories } = await supabaseAdmin
+      .from("conversation_memories")
+      .select("memory")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: false })
+      .limit(5);
 
-      memoryText =
-        memories
-          ?.map((item) => item.memory)
-          .join("\n") || "";
-    }
+    memoryText =
+      memories
+        ?.map((item) => item.memory)
+        .join("\n") || "";
 
     if (!message) {
       return NextResponse.json(

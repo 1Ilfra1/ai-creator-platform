@@ -23,7 +23,6 @@ interface Creator {
     display_name: string;
     tagline: string | null;
     profile_image: string | null;
-    personality_prompt: string | null;
     intro_audio: string | null;
 }
 
@@ -81,8 +80,8 @@ export default function ChatPage({
             }
 
             const { data: creatorData, error: creatorError } = await supabase
-                .from("creators")
-                .select("id, username, display_name, tagline, profile_image, personality_prompt, intro_audio")
+                .from("public_creators")
+                .select("id, username, display_name, tagline, profile_image, intro_audio")
                 .eq("username", username)
                 .single();
 
@@ -308,9 +307,7 @@ export default function ChatPage({
                     },
                     body: JSON.stringify({
                         message: text,
-                        creatorName: creator.display_name,
-                        creatorTagline: creator.tagline,
-                        creatorStyle: creator.personality_prompt,
+                        conversationId,
                         recentMessages,
                     }),
                 });
@@ -669,15 +666,11 @@ export default function ChatPage({
                         <div className="text-4xl mb-4">💜</div>
 
                         <h2 className="text-2xl font-bold mb-2">
-                            You’re out of voice minutes
+                            You're out of voice minutes.
                         </h2>
 
                         <p className="text-zinc-400 mb-6">
-                            Upgrade to Premium and get 60 voice minutes every month. More minutes can be added later.
-                        </p>
-
-                        <p className="text-zinc-400 mb-6">
-                            Continue the conversation and keep listening to creator voice replies.
+                            Choose a plan or add more voice minutes to keep chatting.
                         </p>
 
                         <button
@@ -686,7 +679,7 @@ export default function ChatPage({
                             }}
                             className="w-full bg-green-500 text-black py-4 rounded-2xl font-bold mb-3"
                         >
-                            Continue conversation
+                            View plans & minutes
                         </button>
 
                         <button
