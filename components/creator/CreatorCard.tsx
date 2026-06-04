@@ -23,6 +23,12 @@ export default function CreatorCard({
     router.push(`/chat/${creator.username}`);
   }
 
+  async function handleShare() {
+    const link = `${window.location.origin}/creator/${creator.username}`;
+    await navigator.clipboard.writeText(link);
+    alert("Profile link copied!");
+  }
+
   return (
     <div
       onClick={openProfile}
@@ -66,7 +72,7 @@ export default function CreatorCard({
         </p>
 
         <div className="mt-5 space-y-3">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -85,6 +91,16 @@ export default function CreatorCard({
               className="rounded-2xl bg-zinc-800 py-3 text-xs font-semibold hover:bg-zinc-700 transition"
             >
               ▶ Voice
+            </button>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleShare();
+              }}
+              className="rounded-2xl bg-zinc-800 py-3 text-xs font-semibold hover:bg-zinc-700 transition"
+            >
+              Share
             </button>
           </div>
 

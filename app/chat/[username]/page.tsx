@@ -480,7 +480,7 @@ export default function ChatPage({
                 </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-28">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-36">
                 {!hasUserMessages && (
                     <div className="text-center mt-20">
                         <p className="text-zinc-500 mb-5">
@@ -489,9 +489,9 @@ export default function ChatPage({
 
                         <div className="flex flex-col gap-3 items-center">
                             {[
-                                "Tell me something 💜",
-                                "I missed you so much",
-                                "How are you?",
+                                "Call me daddy 😏",
+                                "Say meow 🐱",
+                                "Tell me you missed me ❤️",
                             ].map((reply) => (
                                 <button
                                     key={reply}
@@ -622,7 +622,7 @@ export default function ChatPage({
                 <div ref={bottomRef} />
             </div>
 
-            <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-800 bg-black/95 backdrop-blur p-4">
+            <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-800 bg-black/95 backdrop-blur p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
                 <div className="flex gap-3">
                     <input
                         disabled={isWaitingForReply}

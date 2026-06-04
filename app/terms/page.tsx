@@ -12,15 +12,27 @@
           </p>
 
           <p>
-            AI replies are not from the real creator unless explicitly stated.
+            AI-generated chat replies and AI-generated voice messages are not real-time messages from the creator unless explicitly stated.
           </p>
 
           <p>
-            Abuse, illegal activity, harassment, fraud, and misuse are prohibited.
+            Users are responsible for the messages, profile information, creator settings, and uploaded creator assets they provide.
           </p>
 
           <p>
-            Paid plans and top-ups provide access to voice minutes according to the selected plan.
+            Creator profiles, images, audio, voice settings, names, and descriptions must be content you own, control, or have permission to use.
+          </p>
+
+          <p>
+            Paid subscriptions and top-ups provide access to voice minutes according to the selected plan or package. Payments are processed by Stripe.
+          </p>
+
+          <p>
+            The service uses third-party providers including Supabase, Stripe, OpenAI, and ElevenLabs to operate authentication, storage, payments, AI chat, and AI voice features.
+          </p>
+
+          <p>
+            Abuse, illegal activity, harassment, fraud, impersonation without rights, and misuse of AI voice or creator profiles are prohibited.
           </p>
 
           <p>

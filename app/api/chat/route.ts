@@ -7,7 +7,7 @@ const openai = new OpenAI({
 });
 
 const MAX_MESSAGE_LENGTH = 500;
-const DAILY_CHAT_LIMIT = 500;
+const DAILY_CHAT_LIMIT = 100;
 
 const fallbackReplies = [
   "I’m here with you 💜",
@@ -91,7 +91,7 @@ export async function POST(request: Request) {
       .eq("endpoint", "chat")
       .gte("created_at", oneDayAgo);
 
-    if ((dailyCount || 0) >= 100) {
+    if ((dailyCount || 0) >= DAILY_CHAT_LIMIT) {
       return NextResponse.json(
         { error: "Daily chat limit reached" },
         { status: 429 }

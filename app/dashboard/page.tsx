@@ -27,15 +27,13 @@ export default function DashboardPage() {
     const [tagline, setTagline] = useState("");
     const [personalityPrompt, setPersonalityPrompt] = useState("");
     const usernameValid = /^[a-zA-Z0-9_-]{3,30}$/.test(username.trim());
-    const profileComplete =
+    const profileComplete = Boolean(
         usernameValid &&
         displayName.trim() &&
         tagline.trim() &&
         personalityPrompt.trim() &&
-        profileImage &&
-        bannerImage &&
-        introAudio &&
-        voiceId.trim();
+        voiceId.trim()
+    );
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
     const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
 
@@ -572,14 +570,21 @@ export default function DashboardPage() {
                             </h3>
 
                             <div className="space-y-2 text-sm">
+                                <p className="text-xs uppercase tracking-wide text-yellow-300">
+                                    Required
+                                </p>
                                 <p>{usernameValid ? "✅" : "⬜"} Username</p>
                                 <p>{displayName.trim() ? "✅" : "⬜"} Display name</p>
                                 <p>{tagline.trim() ? "✅" : "⬜"} Creator description</p>
                                 <p>{personalityPrompt.trim() ? "✅" : "⬜"} Personality setup</p>
+                                <p>{voiceId.trim() ? "✅" : "⬜"} ElevenLabs voice ID</p>
+
+                                <p className="text-xs uppercase tracking-wide text-zinc-500 pt-3">
+                                    Optional
+                                </p>
                                 <p>{profileImage ? "✅" : "⬜"} Profile image</p>
                                 <p>{bannerImage ? "✅" : "⬜"} Banner image</p>
                                 <p>{introAudio ? "✅" : "⬜"} Intro voice message</p>
-                                <p>{voiceId.trim() ? "✅" : "⬜"} ElevenLabs voice ID</p>
                             </div>
                         </div>
                     )}

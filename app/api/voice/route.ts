@@ -3,6 +3,7 @@ import { ElevenLabsClient } from "elevenlabs";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const MAX_VOICE_TEXT_LENGTH = 500;
+const DAILY_VOICE_LIMIT = 60;
 
 export async function POST(request: Request) {
   let lockedUserId: string | null = null;
@@ -47,6 +48,27 @@ export async function POST(request: Request) {
     if ((count || 0) >= 10) {
       return NextResponse.json(
         { error: "Too many voice requests" },
+        { status: 429 }
+      );
+    }
+
+    const oneDayAgo = new Date(
+      Date.now() - 24 * 60 * 60 * 1000
+    ).toISOString();
+
+    const { count: dailyCount } = await supabaseAdmin
+      .from("api_rate_limits")
+      .select("*", {
+        count: "exact",
+        head: true,
+      })
+      .eq("user_id", user.id)
+      .eq("endpoint", "voice")
+      .gte("created_at", oneDayAgo);
+
+    if ((dailyCount || 0) >= DAILY_VOICE_LIMIT) {
+      return NextResponse.json(
+        { error: "Daily voice limit reached" },
         { status: 429 }
       );
     }

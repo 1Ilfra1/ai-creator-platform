@@ -12,7 +12,19 @@
           </p>
 
           <p>
-            AI-generated responses are inspired by creator profiles but are not messages from the real creator.
+            AI-generated chat responses are inspired by creator profiles, creator settings, and conversation context, but they are not real-time messages from the real creator.
+          </p>
+
+          <p>
+            AI-generated voice replies may use synthetic voice technology. The voice audio is generated automatically from AI text responses.
+          </p>
+
+          <p>
+            Creator intro audio, uploaded creator assets, and creator profile settings may be used to shape the fan experience, but generated replies remain AI-generated.
+          </p>
+
+          <p>
+            Creator Voice uses providers including OpenAI for AI-generated chat, ElevenLabs for AI-generated voice, Supabase for account data and storage, and Stripe for payments.
           </p>
 
           <p>

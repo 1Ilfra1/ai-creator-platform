@@ -44,7 +44,7 @@ export default function ProfilePage() {
         const { data: creator } = await supabase
           .from("creators")
           .select(
-            "username, display_name, tagline, personality_prompt, profile_image, banner_image, intro_audio, voice_id"
+            "username, display_name, tagline, personality_prompt, voice_id"
           )
           .eq("user_id", user.id)
           .maybeSingle();
@@ -54,9 +54,6 @@ export default function ProfilePage() {
           creator.display_name &&
           creator.tagline &&
           creator.personality_prompt &&
-          creator.profile_image &&
-          creator.banner_image &&
-          creator.intro_audio &&
           creator.voice_id
         ) {
           setCreatorUsername(creator.username || "");
