@@ -12,7 +12,7 @@ interface ChatItem {
     username: string;
     display_name: string;
     profile_image: string | null;
-  };
+  } | null;
   last_message: string;
 }
 
@@ -38,11 +38,7 @@ export default function ChatsPage() {
         .from("conversations")
         .select(`
           id,
-          creator:creators (
-            username,
-            display_name,
-            profile_image
-          )
+          creator_id
         `)
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
@@ -51,6 +47,21 @@ export default function ChatsPage() {
         setLoading(false);
         return;
       }
+
+      const creatorIds = conversations
+        .map((conversation: any) => conversation.creator_id)
+        .filter(Boolean);
+
+      const { data: creators } = creatorIds.length > 0
+        ? await supabase
+          .from("public_creators")
+          .select("id, username, display_name, profile_image")
+          .in("id", creatorIds)
+        : { data: [] };
+
+      const creatorsById = new Map(
+        (creators || []).map((creator: any) => [creator.id, creator])
+      );
 
       const formattedChats = await Promise.all(
         conversations.map(async (conversation: any) => {
@@ -65,7 +76,7 @@ export default function ChatsPage() {
 
           return {
             id: conversation.id,
-            creator: conversation.creator,
+            creator: creatorsById.get(conversation.creator_id) || null,
             last_message:
               message?.text || "Start your conversation",
           };
@@ -117,14 +128,16 @@ export default function ChatsPage() {
           {chats.map((chat) => (
             <button
               key={chat.id}
-              onClick={() =>
-                router.push(`/chat/${chat.creator.username}`)
-              }
+              onClick={() => {
+                if (chat.creator) {
+                  router.push(`/chat/${chat.creator.username}`);
+                }
+              }}
               className="w-full bg-zinc-900 border border-zinc-800 rounded-3xl p-4 flex items-center gap-4 text-left"
             >
 
               <div className="w-14 h-14 rounded-full overflow-hidden bg-zinc-800 flex items-center justify-center text-xl shrink-0">
-                {chat.creator.profile_image ? (
+                {chat.creator?.profile_image ? (
                   <img
                     src={chat.creator.profile_image}
                     alt={chat.creator.display_name}
@@ -138,11 +151,11 @@ export default function ChatsPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <h2 className="font-semibold truncate">
-                    {chat.creator.display_name}
+                    {chat.creator?.display_name || "Creator unavailable"}
                   </h2>
 
                   <span className="text-zinc-500 text-sm truncate">
-                    @{chat.creator.username}
+                    {chat.creator ? `@${chat.creator.username}` : "Not public"}
                   </span>
                 </div>
 

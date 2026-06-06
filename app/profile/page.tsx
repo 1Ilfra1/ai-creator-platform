@@ -17,6 +17,7 @@ export default function ProfilePage() {
   const [creatorReadyUnpublished, setCreatorReadyUnpublished] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameDraft, setUsernameDraft] = useState("");
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
 
   useEffect(() => {
     async function getUser() {
@@ -141,9 +142,17 @@ export default function ProfilePage() {
 
     const link = `${window.location.origin}/creator/${creatorUsername}`;
 
-    await navigator.clipboard.writeText(link);
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopyStatus("copied");
+    } catch (error) {
+      console.error("Failed to copy creator link:", error);
+      setCopyStatus("failed");
+    }
 
-    alert("Profile link copied!");
+    window.setTimeout(() => {
+      setCopyStatus("idle");
+    }, 2000);
   }
 
   const minutes = Math.floor(seconds / 60);
@@ -206,9 +215,18 @@ export default function ProfilePage() {
               <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={copyCreatorLink}
-                  className="bg-white text-black p-3 rounded-2xl font-bold"
+                  className={`p-3 rounded-2xl font-bold transition ${copyStatus === "copied"
+                    ? "bg-green-500 text-black"
+                    : copyStatus === "failed"
+                      ? "bg-red-500 text-white"
+                      : "bg-white text-black"
+                    }`}
                 >
-                  Copy link
+                  {copyStatus === "copied"
+                    ? "Copied ✓"
+                    : copyStatus === "failed"
+                      ? "Copy failed"
+                      : "Copy link"}
                 </button>
 
                 <button
@@ -355,6 +373,48 @@ export default function ProfilePage() {
           >
             Logout
           </button>
+
+          <div className="mt-6 border-t border-zinc-900 pt-5 text-sm text-zinc-500">
+            <p className="mb-4">
+              Support:{" "}
+              <a
+                href="mailto:sup1clients@gmail.com"
+                className="text-zinc-300 hover:text-white transition"
+              >
+                sup1clients@gmail.com
+              </a>
+            </p>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => router.push("/privacy")}
+                className="text-left hover:text-white transition"
+              >
+                Privacy Policy
+              </button>
+
+              <button
+                onClick={() => router.push("/terms")}
+                className="text-left hover:text-white transition"
+              >
+                Terms
+              </button>
+
+              <button
+                onClick={() => router.push("/refund-policy")}
+                className="text-left hover:text-white transition"
+              >
+                Refund Policy
+              </button>
+
+              <button
+                onClick={() => router.push("/ai")}
+                className="text-left hover:text-white transition"
+              >
+                AI Disclosure
+              </button>
+            </div>
+          </div>
         </div>
 
         <BottomNav />

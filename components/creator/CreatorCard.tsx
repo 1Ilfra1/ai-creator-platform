@@ -2,6 +2,7 @@
 
 import { PublicCreator } from "@/types/creator";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 export default function CreatorCard({
   creator,
@@ -9,6 +10,7 @@ export default function CreatorCard({
   creator: PublicCreator;
 }) {
   const router = useRouter();
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
 
   function handlePreview() {
     const audio = new Audio(creator.intro_audio || "/mock-voice.mp3");
@@ -25,8 +27,18 @@ export default function CreatorCard({
 
   async function handleShare() {
     const link = `${window.location.origin}/creator/${creator.username}`;
-    await navigator.clipboard.writeText(link);
-    alert("Profile link copied!");
+
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopyStatus("copied");
+    } catch (error) {
+      console.error("Failed to copy creator link:", error);
+      setCopyStatus("failed");
+    }
+
+    window.setTimeout(() => {
+      setCopyStatus("idle");
+    }, 2000);
   }
 
   return (
@@ -98,9 +110,18 @@ export default function CreatorCard({
                 e.stopPropagation();
                 handleShare();
               }}
-              className="rounded-2xl bg-zinc-800 py-3 text-xs font-semibold hover:bg-zinc-700 transition"
+              className={`rounded-2xl py-3 text-xs font-semibold transition ${copyStatus === "copied"
+                ? "bg-green-500 text-black"
+                : copyStatus === "failed"
+                  ? "bg-red-500 text-white"
+                  : "bg-zinc-800 hover:bg-zinc-700"
+                }`}
             >
-              Share
+              {copyStatus === "copied"
+                ? "Copied ✓"
+                : copyStatus === "failed"
+                  ? "Copy failed"
+                  : "Share"}
             </button>
           </div>
 

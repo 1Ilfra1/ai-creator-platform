@@ -36,6 +36,7 @@ export default function CreatorProfilePage({
     const [loading, setLoading] = useState(true);
 
     const [showFullBio, setShowFullBio] = useState(false);
+    const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
 
     useEffect(() => {
 
@@ -155,26 +156,14 @@ export default function CreatorProfilePage({
                     )}
                 </div>
 
-                <div className="mb-8">
-                    <p className="text-zinc-400 leading-relaxed">
-                        Stay close anytime 💜
-                        Voice notes, conversations, and moments whenever you need them.
-                    </p>
-                </div>
-
-
                 <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 mb-6">
 
                     <div className="flex items-center justify-between mb-4">
 
                         <div>
                             <h2 className="font-semibold">
-                                A little voice note 💜
+                                Voice intro 💜
                             </h2>
-
-                            <p className="text-sm text-zinc-500">
-                                Hear from me before we talk
-                            </p>
                         </div>
 
                         <div className="w-3 h-3 rounded-full bg-green-500" />
@@ -198,13 +187,30 @@ export default function CreatorProfilePage({
 
                 <button
                     onClick={async () => {
-                        await navigator.clipboard.writeText(window.location.href);
+                        try {
+                            await navigator.clipboard.writeText(window.location.href);
+                            setCopyStatus("copied");
+                        } catch (error) {
+                            console.error("Failed to copy creator link:", error);
+                            setCopyStatus("failed");
+                        }
 
-                        alert("Profile link copied!");
+                        window.setTimeout(() => {
+                            setCopyStatus("idle");
+                        }, 2000);
                     }}
-                    className="w-full mt-3 bg-zinc-900 border border-zinc-800 text-white py-4 rounded-3xl font-semibold"
+                    className={`w-full mt-3 border py-4 rounded-3xl font-semibold transition ${copyStatus === "copied"
+                        ? "bg-green-500 border-green-500 text-black"
+                        : copyStatus === "failed"
+                            ? "bg-red-500 border-red-500 text-white"
+                            : "bg-zinc-900 border-zinc-800 text-white"
+                        }`}
                 >
-                    Share profile
+                    {copyStatus === "copied"
+                        ? "Copied ✓"
+                        : copyStatus === "failed"
+                            ? "Copy failed"
+                            : "Share profile"}
                 </button>
 
             </div>
