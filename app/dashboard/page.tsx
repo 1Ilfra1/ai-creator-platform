@@ -21,6 +21,10 @@ export default function DashboardPage() {
     const [bannerImage, setBannerImage] = useState("");
     const [introAudio, setIntroAudio] = useState("");
     const [voiceId, setVoiceId] = useState("");
+    const [voiceValidationStatus, setVoiceValidationStatus] = useState<
+        "idle" | "checking" | "valid" | "invalid" | "malformed"
+    >("idle");
+    const [voiceValidationMessage, setVoiceValidationMessage] = useState("");
     const [uploadingAudio, setUploadingAudio] = useState(false);
     const [uploadingProfileImage, setUploadingProfileImage] = useState(false);
     const [uploadingBannerImage, setUploadingBannerImage] = useState(false);
@@ -28,12 +32,13 @@ export default function DashboardPage() {
     const [tagline, setTagline] = useState("");
     const [personalityPrompt, setPersonalityPrompt] = useState("");
     const usernameValid = /^[a-zA-Z0-9_-]{3,30}$/.test(username.trim());
+    const voiceIdFormatValid = /^[A-Za-z0-9_-]{10,64}$/.test(voiceId.trim());
     const profileComplete = Boolean(
         usernameValid &&
         displayName.trim() &&
         tagline.trim() &&
         personalityPrompt.trim() &&
-        voiceId.trim()
+        voiceValidationStatus === "valid"
     );
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
     const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
@@ -130,7 +135,7 @@ export default function DashboardPage() {
             const { error } = await supabase.storage
                 .from("creator-intros")
                 .upload(fileName, file, {
-                    upsert: true,
+                    upsert: false,
                 });
 
             if (error) {
@@ -184,7 +189,7 @@ export default function DashboardPage() {
             const { error } = await supabase.storage
                 .from("creator-assets")
                 .upload(fileName, file, {
-                    upsert: true,
+                    upsert: false,
                 });
 
             if (error) {
@@ -234,12 +239,65 @@ export default function DashboardPage() {
         alert("Profile published!");
     }
 
+    function handleVoiceIdChange(value: string) {
+        setVoiceId(value);
+        setVoiceValidationStatus("idle");
+        setVoiceValidationMessage("");
+    }
+
+    async function verifyVoiceId() {
+        const nextVoiceId = voiceId.trim();
+
+        if (!nextVoiceId || !voiceIdFormatValid) {
+            setVoiceValidationStatus("malformed");
+            setVoiceValidationMessage("Invalid Voice ID format");
+            return;
+        }
+
+        try {
+            setVoiceValidationStatus("checking");
+            setVoiceValidationMessage("");
+
+            const {
+                data: { session },
+            } = await supabase.auth.getSession();
+
+            const response = await fetch("/api/elevenlabs/validate-voice", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${session?.access_token}`,
+                },
+                body: JSON.stringify({
+                    voiceId: nextVoiceId,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.valid) {
+                setVoiceValidationStatus("valid");
+                setVoiceValidationMessage("Voice ID verified ✓");
+                return;
+            }
+
+            setVoiceValidationStatus("invalid");
+            setVoiceValidationMessage(
+                data.error || "Voice ID not found or unavailable"
+            );
+        } catch (error) {
+            console.error("Failed to verify voice ID:", error);
+            setVoiceValidationStatus("invalid");
+            setVoiceValidationMessage("Voice ID not found or unavailable");
+        }
+    }
+
     async function saveProfile() {
 
         if (!currentUserId) return;
 
         if (!profileComplete) {
-            alert("Complete all required creator profile fields first.");
+            alert("Complete all required creator profile fields and verify the Voice ID first.");
             return;
         }
 
@@ -537,15 +595,43 @@ export default function DashboardPage() {
 
                         <input
                             value={voiceId}
-                            onChange={(e) => setVoiceId(e.target.value)}
+                            onChange={(e) => handleVoiceIdChange(e.target.value)}
                             type="text"
                             placeholder="ElevenLabs voice ID"
                             className="w-full bg-black border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
                         />
 
-                        {voiceId && (
+                        <button
+                            type="button"
+                            onClick={verifyVoiceId}
+                            disabled={!voiceId.trim() || voiceValidationStatus === "checking"}
+                            className="mt-3 rounded-2xl bg-white text-black px-4 py-3 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                            Verify voice ID
+                        </button>
+
+                        {voiceId && voiceValidationStatus === "idle" && (
+                            <p className="text-sm text-zinc-500 mt-2">
+                                Voice ID saved — verify before publishing.
+                            </p>
+                        )}
+
+                        {voiceValidationStatus === "checking" && (
+                            <p className="text-sm text-zinc-500 mt-2">
+                                Checking voice ID...
+                            </p>
+                        )}
+
+                        {voiceValidationStatus === "valid" && (
                             <p className="text-sm text-green-400 mt-2">
-                                Voice ID connected
+                                {voiceValidationMessage}
+                            </p>
+                        )}
+
+                        {(voiceValidationStatus === "invalid" ||
+                            voiceValidationStatus === "malformed") && (
+                            <p className="text-sm text-red-400 mt-2">
+                                {voiceValidationMessage}
                             </p>
                         )}
 
@@ -586,7 +672,7 @@ export default function DashboardPage() {
                                 <p>{displayName.trim() ? "✅" : "⬜"} Display name</p>
                                 <p>{tagline.trim() ? "✅" : "⬜"} Creator description</p>
                                 <p>{personalityPrompt.trim() ? "✅" : "⬜"} Personality setup</p>
-                                <p>{voiceId.trim() ? "✅" : "⬜"} ElevenLabs voice ID</p>
+                                <p>{voiceValidationStatus === "valid" ? "✅" : "⬜"} Verified ElevenLabs voice ID</p>
 
                                 <p className="text-xs uppercase tracking-wide text-zinc-500 pt-3">
                                     Optional
