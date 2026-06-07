@@ -37,6 +37,7 @@ export default function CreatorProfilePage({
 
     const [showFullBio, setShowFullBio] = useState(false);
     const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+    const [showBackButton, setShowBackButton] = useState(false);
 
     useEffect(() => {
 
@@ -57,6 +58,18 @@ export default function CreatorProfilePage({
         loadCreator();
 
     }, [username]);
+
+    useEffect(() => {
+        if (!document.referrer) return;
+
+        try {
+            const referrerUrl = new URL(document.referrer);
+
+            setShowBackButton(referrerUrl.origin === window.location.origin);
+        } catch {
+            setShowBackButton(false);
+        }
+    }, []);
 
     if (loading) {
         return (
@@ -93,6 +106,15 @@ export default function CreatorProfilePage({
         <main className="min-h-screen bg-black text-white pb-24">
 
             <div className="relative h-64 bg-gradient-to-br from-purple-900/70 via-zinc-900 to-black">
+                {showBackButton && (
+                    <button
+                        onClick={() => router.back()}
+                        className="absolute left-4 top-4 z-20 h-10 w-10 rounded-full bg-black/70 text-white border border-white/10 backdrop-blur flex items-center justify-center"
+                        aria-label="Go back"
+                    >
+                        ←
+                    </button>
+                )}
 
                 {creator.banner_image && (
                     <img

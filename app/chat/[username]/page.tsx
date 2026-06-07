@@ -44,6 +44,7 @@ export default function ChatPage({
     const [subscriptionStatus, setSubscriptionStatus] = useState("free");
     const [remainingSeconds, setRemainingSeconds] = useState(0);
     const [hasPaidBefore, setHasPaidBefore] = useState(false);
+    const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
     const MAX_MESSAGE_LENGTH = 500;
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -313,6 +314,23 @@ export default function ChatPage({
                 });
 
                 const aiData = await aiResponse.json();
+
+                if (!aiResponse.ok) {
+                    if (aiResponse.status === 401) {
+                        setVoiceNotice("Please log in again.");
+                    } else if (aiResponse.status === 403) {
+                        setVoiceNotice(
+                            "Chat session expired. Please refresh and try again."
+                        );
+                    } else if (aiResponse.status === 429) {
+                        setVoiceNotice("Message limit reached. Try again later.");
+                    } else {
+                        setVoiceNotice("Could not generate reply. Please try again.");
+                    }
+
+                    return;
+                }
+
                 const isFallback = aiData.fallback || false;
                 const aiText = aiData.reply || "Tell me more.";
                 const wordCount = aiText.trim().split(/\s+/).length;
@@ -345,9 +363,46 @@ export default function ChatPage({
                 });
 
                 const voiceData = await voiceResponse.json();
-                const audioUrl = voiceData.audio
-                    ? `data:${voiceData.mimeType};base64,${voiceData.audio}`
-                    : voiceData.audioUrl || "/mock-voice.mp3";
+                let audioUrl: string | null = null;
+                let voiceGenerated = false;
+                let voiceFallback = false;
+
+                if (voiceResponse.ok) {
+                    audioUrl = voiceData.audio
+                        ? `data:${voiceData.mimeType};base64,${voiceData.audio}`
+                        : voiceData.audioUrl || null;
+
+                    if (audioUrl) {
+                        voiceGenerated = voiceData.generated || false;
+                        voiceFallback = voiceData.fallback || false;
+                        setVoiceNotice(null);
+                    } else {
+                        voiceFallback = true;
+                        setVoiceNotice(
+                            "Text reply was created, but voice could not be generated."
+                        );
+                    }
+                } else {
+                    voiceFallback = true;
+
+                    if (voiceResponse.status === 402) {
+                        setShowPaywall(true);
+                        setVoiceNotice("You're out of voice minutes.");
+                    } else if (voiceResponse.status === 429) {
+                        setVoiceNotice("Voice limit reached. Try again later.");
+                    } else if (
+                        voiceResponse.status === 401 ||
+                        voiceResponse.status === 403
+                    ) {
+                        setVoiceNotice(
+                            "Could not generate voice. Please refresh and try again."
+                        );
+                    } else {
+                        setVoiceNotice(
+                            "Text reply was created, but voice could not be generated."
+                        );
+                    }
+                }
 
                 const { data: savedAiMessage } = await supabase
                     .from("messages")
@@ -358,8 +413,8 @@ export default function ChatPage({
                         audio_url: audioUrl,
                         audio_duration_seconds: estimatedSeconds,
                         is_fallback: isFallback,
-                        voice_generated: voiceData.generated || false,
-                        voice_fallback: voiceData.fallback || false,
+                        voice_generated: voiceGenerated,
+                        voice_fallback: voiceFallback,
                     })
                     .select()
                     .single();
@@ -620,6 +675,12 @@ export default function ChatPage({
             </div>
 
             <div className="fixed bottom-0 left-0 right-0 border-t border-zinc-800 bg-black/95 backdrop-blur p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+                {voiceNotice && (
+                    <div className="mb-3 rounded-2xl border border-yellow-900 bg-yellow-950/30 px-4 py-3 text-sm text-yellow-200">
+                        {voiceNotice}
+                    </div>
+                )}
+
                 <div className="flex gap-3">
                     <input
                         disabled={isWaitingForReply}

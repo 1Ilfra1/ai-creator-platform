@@ -26,6 +26,34 @@ export async function POST(request: Request) {
       );
     }
 
+    const oneMinuteAgo = new Date(
+      Date.now() - 60 * 1000
+    ).toISOString();
+
+    const { count } = await supabaseAdmin
+      .from("api_rate_limits")
+      .select("*", {
+        count: "exact",
+        head: true,
+      })
+      .eq("user_id", user.id)
+      .eq("endpoint", "stripe_topup")
+      .gte("created_at", oneMinuteAgo);
+
+    if ((count || 0) >= 5) {
+      return NextResponse.json(
+        { error: "Too many top-up checkout requests" },
+        { status: 429 }
+      );
+    }
+
+    await supabaseAdmin
+      .from("api_rate_limits")
+      .insert({
+        user_id: user.id,
+        endpoint: "stripe_topup",
+      });
+
     const body = await request.json();
 
     const pack = body.pack;

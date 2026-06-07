@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const MAX_VOICE_TEXT_LENGTH = 500;
 const DAILY_VOICE_LIMIT = 60;
+const ALLOW_VOICE_MOCK = process.env.ALLOW_VOICE_MOCK === "true";
 
 export async function POST(request: Request) {
   let lockedUserId: string | null = null;
@@ -137,19 +138,33 @@ export async function POST(request: Request) {
     }
 
     if (!creator?.voice_id) {
-      return NextResponse.json({
-        audioUrl: "/mock-voice.mp3",
-        mock: true,
-      });
+      if (ALLOW_VOICE_MOCK) {
+        return NextResponse.json({
+          audioUrl: "/mock-voice.mp3",
+          mock: true,
+        });
+      }
+
+      return NextResponse.json(
+        { error: "Creator voice is not configured" },
+        { status: 422 }
+      );
     }
 
     const apiKey = process.env.ELEVENLABS_API_KEY;
 
     if (!apiKey) {
-      return NextResponse.json({
-        audioUrl: "/mock-voice.mp3",
-        mock: true,
-      });
+      if (ALLOW_VOICE_MOCK) {
+        return NextResponse.json({
+          audioUrl: "/mock-voice.mp3",
+          mock: true,
+        });
+      }
+
+      return NextResponse.json(
+        { error: "ElevenLabs API key is not configured" },
+        { status: 500 }
+      );
     }
 
     const { error: lockError } = await supabaseAdmin
@@ -159,10 +174,17 @@ export async function POST(request: Request) {
       });
 
     if (lockError) {
-      return NextResponse.json({
-        audioUrl: "/mock-voice.mp3",
-        fallback: true,
-      });
+      if (ALLOW_VOICE_MOCK) {
+        return NextResponse.json({
+          audioUrl: "/mock-voice.mp3",
+          fallback: true,
+        });
+      }
+
+      return NextResponse.json(
+        { error: "Voice generation already in progress" },
+        { status: 429 }
+      );
     }
 
     lockedUserId = user.id;
@@ -197,10 +219,19 @@ export async function POST(request: Request) {
         .delete()
         .eq("user_id", user.id);
 
-      return NextResponse.json({
-        audioUrl: "/mock-voice.mp3",
-        fallback: true,
-      });
+      lockedUserId = null;
+
+      if (ALLOW_VOICE_MOCK) {
+        return NextResponse.json({
+          audioUrl: "/mock-voice.mp3",
+          fallback: true,
+        });
+      }
+
+      return NextResponse.json(
+        { error: "Voice upload failed" },
+        { status: 500 }
+      );
     }
 
     const remainingAfterGeneration = Math.max(
@@ -241,9 +272,16 @@ export async function POST(request: Request) {
         .eq("user_id", lockedUserId);
     }
 
-    return NextResponse.json({
-      audioUrl: "/mock-voice.mp3",
-      fallback: true,
-    });
+    if (ALLOW_VOICE_MOCK) {
+      return NextResponse.json({
+        audioUrl: "/mock-voice.mp3",
+        fallback: true,
+      });
+    }
+
+    return NextResponse.json(
+      { error: "Voice generation failed" },
+      { status: 502 }
+    );
   }
 }

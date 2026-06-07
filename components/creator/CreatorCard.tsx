@@ -46,7 +46,7 @@ export default function CreatorCard({
       onClick={openProfile}
       className="bg-zinc-900 rounded-3xl overflow-hidden border border-zinc-800 shadow-2xl cursor-pointer"
     >
-      <div className="relative h-44 bg-gradient-to-br from-purple-900/60 via-zinc-800 to-black flex items-center justify-center">
+      <div className="relative h-44 bg-gradient-to-br from-purple-900/60 via-zinc-800 to-black">
         {creator.banner_image && (
           <img
             src={creator.banner_image}
@@ -55,7 +55,7 @@ export default function CreatorCard({
           />
         )}
 
-        <div className="relative w-24 h-24 rounded-full bg-zinc-800/90 border border-zinc-600 flex items-center justify-center text-3xl shadow-xl">
+        <div className="absolute left-4 -bottom-10 w-24 h-24 rounded-full bg-zinc-800/90 border-4 border-zinc-900 flex items-center justify-center text-3xl shadow-xl">
           {creator.profile_image ? (
             <img
               src={creator.profile_image}
@@ -68,7 +68,7 @@ export default function CreatorCard({
         </div>
       </div>
 
-      <div className="p-4">
+      <div className="px-4 pb-4 pt-12">
         <div className="flex items-center gap-2">
           <h2 className="text-2xl font-bold">
             {creator.display_name}

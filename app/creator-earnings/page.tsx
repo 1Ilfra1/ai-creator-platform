@@ -90,8 +90,15 @@ export default function CreatorEarningsPage() {
       <main className="min-h-screen bg-black text-white p-6 pb-24">
         <div className="max-w-md mx-auto">
 
+          <button
+            onClick={() => router.push("/profile")}
+            className="text-sm text-zinc-400 hover:text-white transition mb-4"
+          >
+            ← Profile
+          </button>
+
           <h1 className="text-3xl font-bold mb-2">
-            Creator Earnings
+            Creator Analytics
           </h1>
 
           <p className="text-zinc-500 mb-8">

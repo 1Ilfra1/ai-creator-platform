@@ -15,6 +15,7 @@ export default function DashboardPage() {
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [creatorId, setCreatorId] = useState<string | null>(null);
     const [isPublished, setIsPublished] = useState(false);
+    const [isActive, setIsActive] = useState(false);
     const [username, setUsername] = useState("");
     const [displayName, setDisplayName] = useState("");
     const [profileImage, setProfileImage] = useState("");
@@ -70,6 +71,14 @@ export default function DashboardPage() {
 
                 setCurrentUserId(user.id);
 
+                const { data: profile } = await supabase
+                    .from("profiles")
+                    .select("username")
+                    .eq("id", user.id)
+                    .single();
+
+                setUsername(profile?.username || "");
+
                 const { data } = await supabase
                     .from("creators")
                     .select("*")
@@ -80,13 +89,13 @@ export default function DashboardPage() {
 
                     setCreatorId(data.id);
 
-                    setUsername(data.username || "");
                     setDisplayName(data.display_name || "");
                     setTagline(data.tagline || "");
                     setPersonalityPrompt(
                         data.personality_prompt || ""
                     );
                     setIsPublished(data.is_published || false);
+                    setIsActive(data.is_active || false);
                     setProfileImage(data.profile_image || "");
                     setBannerImage(data.banner_image || "");
                     setIntroAudio(data.intro_audio || "");
@@ -236,7 +245,7 @@ export default function DashboardPage() {
         setIsPublished(true);
         setSaveSuccess("");
 
-        alert("Profile published!");
+        alert("Profile submitted for approval!");
     }
 
     function handleVoiceIdChange(value: string) {
@@ -318,12 +327,12 @@ export default function DashboardPage() {
                 .from("creators")
                 .update(creatorPayload)
                 .eq("id", creatorId)
-                .select("id")
+                .select("id, is_active")
                 .single()
             : await supabase
                 .from("creators")
                 .insert(creatorPayload)
-                .select("id")
+                .select("id, is_active")
                 .single();
 
         if (error) {
@@ -334,6 +343,7 @@ export default function DashboardPage() {
 
         if (data) {
             setCreatorId(data.id);
+            setIsActive(data.is_active || false);
         }
 
         setSaveSuccess("Creator profile saved. You can publish it when you are ready.");
@@ -352,12 +362,19 @@ export default function DashboardPage() {
 
             <main className="min-h-screen bg-black text-white p-6 max-w-2xl mx-auto pb-24">
 
+                <button
+                    onClick={() => router.push("/profile")}
+                    className="text-sm text-zinc-400 hover:text-white transition mb-4"
+                >
+                    ← Profile
+                </button>
+
                 <h1 className="text-3xl font-bold mb-2">
                     Creator Studio
                 </h1>
 
                 <p className="text-zinc-500 mb-8">
-                    Set up your creator profile so fans can find you and start chatting.
+                    Set up your creator profile so fans can find you after approval.
                 </p>
 
                 <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden mb-8">
@@ -421,15 +438,21 @@ export default function DashboardPage() {
                             Username
                         </label>
 
-                        <input
-                            value={username}
-                            onChange={(e) => setUsername(e.target.value)}
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
-                            placeholder="luna"
-                        />
-                        <p className="text-xs text-zinc-500 mt-2">
-                            3-30 characters. Use letters, numbers, underscores, or dashes.
-                        </p>
+                        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3">
+                            <p className="font-semibold">
+                                @{username || "username"}
+                            </p>
+
+                            {usernameValid ? (
+                                <p className="text-xs text-zinc-500 mt-2">
+                                    Used for your public creator link: /creator/{username}
+                                </p>
+                            ) : (
+                                <p className="text-xs text-yellow-300 mt-2">
+                                    Set your username in Profile before publishing your creator profile.
+                                </p>
+                            )}
+                        </div>
                     </div>
 
                     <div>
@@ -687,28 +710,38 @@ export default function DashboardPage() {
                     {creatorId && !isPublished && profileComplete && (
                         <div className="border border-green-900 bg-green-950/30 rounded-3xl p-5">
                             <h3 className="font-semibold text-green-300 mb-2">
-                                Ready to publish
+                                Ready to submit
                             </h3>
 
                             <p className="text-sm text-zinc-400 mb-4">
-                                Publish your profile so fans can find it and start chatting.
+                                Submit your profile for approval so fans can find it after approval.
                             </p>
 
                             <button
                                 onClick={publishProfile}
                                 className="w-full bg-white text-black py-4 rounded-2xl font-bold"
                             >
-                                Publish profile
+                                Submit for approval
                             </button>
                         </div>
                     )}
 
-                    {isPublished && (
+                    {isPublished && isActive && (
                         <div className="border border-green-900 bg-green-950/30 rounded-3xl p-5">
                             <div className="flex items-center gap-2 text-sm text-green-400">
                                 <div className="w-2 h-2 rounded-full bg-green-400" />
 
                                 <span>Published and live</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {isPublished && !isActive && (
+                        <div className="border border-yellow-900 bg-yellow-950/30 rounded-3xl p-5">
+                            <div className="flex items-center gap-2 text-sm text-yellow-300">
+                                <div className="w-2 h-2 rounded-full bg-yellow-300" />
+
+                                <span>Submitted / waiting for approval</span>
                             </div>
                         </div>
                     )}

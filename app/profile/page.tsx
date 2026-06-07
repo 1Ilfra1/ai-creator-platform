@@ -13,8 +13,10 @@ export default function ProfilePage() {
   const [username, setUsername] = useState("");
   const [seconds, setSeconds] = useState(0);
   const [subscriptionStatus, setSubscriptionStatus] = useState("free");
+  const [plan, setPlan] = useState("free");
   const [creatorUsername, setCreatorUsername] = useState("");
   const [creatorReadyUnpublished, setCreatorReadyUnpublished] = useState(false);
+  const [creatorWaitingApproval, setCreatorWaitingApproval] = useState(false);
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameDraft, setUsernameDraft] = useState("");
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
@@ -31,7 +33,7 @@ export default function ProfilePage() {
         const { data: profile } = await supabase
           .from("profiles")
           .select(
-            "username, voice_seconds_remaining, subscription_status"
+            "username, voice_seconds_remaining, subscription_status, plan"
           )
           .eq("id", user.id)
           .single();
@@ -41,12 +43,13 @@ export default function ProfilePage() {
           setUsernameDraft(profile.username || "");
           setSeconds(profile.voice_seconds_remaining || 0);
           setSubscriptionStatus(profile.subscription_status || "free");
+          setPlan(profile.plan || "free");
         }
 
         const { data: creator } = await supabase
           .from("creators")
           .select(
-            "username, display_name, tagline, personality_prompt, voice_id, is_published"
+            "username, display_name, tagline, personality_prompt, voice_id, is_published, is_active"
           )
           .eq("user_id", user.id)
           .maybeSingle();
@@ -59,12 +62,18 @@ export default function ProfilePage() {
           creator.voice_id
         );
 
-        if (creator && creatorComplete && creator.is_published) {
+        if (creator && creatorComplete && creator.is_published && creator.is_active) {
           setCreatorUsername(creator.username || "");
           setCreatorReadyUnpublished(false);
+          setCreatorWaitingApproval(false);
+        } else if (creator && creatorComplete && creator.is_published) {
+          setCreatorUsername("");
+          setCreatorReadyUnpublished(false);
+          setCreatorWaitingApproval(true);
         } else if (creatorComplete) {
           setCreatorUsername("");
           setCreatorReadyUnpublished(true);
+          setCreatorWaitingApproval(false);
         }
       }
     }
@@ -79,9 +88,10 @@ export default function ProfilePage() {
 
   async function saveUsername() {
     const nextUsername = usernameDraft.trim();
+    const usernameValid = /^[a-zA-Z0-9_-]{3,30}$/.test(nextUsername);
 
-    if (nextUsername.length < 3) {
-      alert("Username must be at least 3 characters.");
+    if (!usernameValid) {
+      alert("Username must be 3-30 characters and use only letters, numbers, underscores, or dashes.");
       return;
     }
 
@@ -90,6 +100,27 @@ export default function ProfilePage() {
     } = await supabase.auth.getUser();
 
     if (!user) return;
+
+    const { data: creator } = await supabase
+      .from("creators")
+      .select("id, display_name, tagline, personality_prompt, voice_id, is_published, is_active")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (creator?.id) {
+      const { error: creatorSyncError } = await supabase
+        .from("creators")
+        .update({
+          username: nextUsername,
+        })
+        .eq("id", creator.id);
+
+      if (creatorSyncError) {
+        console.error(creatorSyncError);
+        alert("Failed to sync your creator username. Please try again.");
+        return;
+      }
+    }
 
     const { error } = await supabase
       .from("profiles")
@@ -106,6 +137,28 @@ export default function ProfilePage() {
 
     setUsername(nextUsername);
     setEditingUsername(false);
+
+    const creatorComplete = Boolean(
+      creator?.id &&
+      creator.display_name &&
+      creator.tagline &&
+      creator.personality_prompt &&
+      creator.voice_id
+    );
+
+    if (creatorComplete && creator?.is_published && creator.is_active) {
+      setCreatorUsername(nextUsername);
+      setCreatorReadyUnpublished(false);
+      setCreatorWaitingApproval(false);
+    } else if (creatorComplete && creator?.is_published) {
+      setCreatorUsername("");
+      setCreatorReadyUnpublished(false);
+      setCreatorWaitingApproval(true);
+    } else if (creatorComplete) {
+      setCreatorUsername("");
+      setCreatorReadyUnpublished(true);
+      setCreatorWaitingApproval(false);
+    }
   }
 
   async function openBillingPortal() {
@@ -159,25 +212,69 @@ export default function ProfilePage() {
   const remainingSeconds = seconds % 60;
   const isPremium = subscriptionStatus === "active";
   const isOutOfMinutes = seconds <= 0;
-  const isCanceledOrPastDue =
-    subscriptionStatus === "canceled" ||
-    subscriptionStatus === "past_due";
+  const isCanceled = subscriptionStatus === "canceled";
+  const isPastDue = subscriptionStatus === "past_due";
+  const formattedPlan =
+    plan === "starter"
+      ? "Starter"
+      : plan === "premium"
+        ? "Premium"
+        : plan === "vip"
+          ? "VIP"
+          : plan === "free" || !plan
+            ? "Free"
+            : plan.charAt(0).toUpperCase() + plan.slice(1);
+  const isPaidPlan =
+    plan === "starter" ||
+    plan === "premium" ||
+    plan === "vip";
+
+  const primaryBillingLabel = isPremium
+    ? isOutOfMinutes
+      ? "Add minutes & Upgrade plan"
+      : "Add minutes & Manage plan"
+    : isPastDue
+      ? "Fix billing & Manage plan"
+      : isCanceled
+        ? "Reactivate & Add minutes"
+        : isOutOfMinutes
+          ? "View plans & Add minutes"
+          : "Choose plan & Add minutes";
+
+  function runPrimaryBillingAction() {
+    if (isPremium) {
+      router.push("/pricing?mode=topup");
+      return;
+    }
+
+    if (isPastDue) {
+      openBillingPortal();
+      return;
+    }
+
+    router.push("/pricing");
+  }
 
   return (
     <ProtectedRoute>
       <main className="min-h-screen bg-black text-white p-6 pb-24">
-        <div className="max-w-md mx-auto">
-          <h1 className="text-3xl font-bold mb-2">Profile</h1>
+        <div className="max-w-md mx-auto space-y-7">
+          <h1 className="text-3xl font-bold">Profile</h1>
 
-          <p className="text-zinc-400">{email}</p>
+          <section>
+            <h2 className="text-xs uppercase tracking-wide text-zinc-500 mb-3">
+              Account
+            </h2>
 
-          <div className="mb-8">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 mb-3">
+              <p className="text-zinc-400 mb-4">{email}</p>
+
             {editingUsername ? (
               <div className="flex gap-2">
                 <input
                   value={usernameDraft}
                   onChange={(event) => setUsernameDraft(event.target.value)}
-                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
+                  className="flex-1 bg-black border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
                   placeholder="username"
                 />
 
@@ -204,10 +301,59 @@ export default function ProfilePage() {
                 </button>
               </div>
             )}
-          </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col justify-center min-h-[110px]">
+                <p className="text-sm text-zinc-500">Plan</p>
+                <p className="text-2xl font-bold flex items-center gap-2 mt-2 whitespace-nowrap">
+                  {isPaidPlan ? (
+                    <>
+                      {formattedPlan} <span>💎</span>
+                    </>
+                  ) : (
+                    formattedPlan
+                  )}
+                </p>
+              </div>
+
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col justify-center min-h-[110px]">
+                <p className="text-sm text-zinc-500">Voice minutes</p>
+                <p className="text-3xl font-bold mt-2">
+                  {minutes}m {remainingSeconds}s
+                </p>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-xs uppercase tracking-wide text-zinc-500 mb-3">
+              Creator
+            </h2>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  router.push("/dashboard");
+                }}
+                className="w-full bg-white text-black p-4 rounded-2xl font-bold"
+              >
+                Creator Studio
+              </button>
+
+              {creatorUsername && (
+                <button
+                  onClick={() => {
+                    router.push("/creator-earnings");
+                  }}
+                  className="w-full bg-zinc-900 border border-zinc-800 text-white p-4 rounded-2xl font-semibold"
+                >
+                  Creator Analytics
+                </button>
+              )}
 
           {creatorUsername && (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 mb-4">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
               <p className="text-sm text-zinc-500 mb-3">
                 Share your creator profile
               </p>
@@ -242,9 +388,9 @@ export default function ProfilePage() {
           )}
 
           {creatorReadyUnpublished && (
-            <div className="bg-yellow-950/30 border border-yellow-900 rounded-2xl p-4 mb-4">
+            <div className="bg-yellow-950/30 border border-yellow-900 rounded-2xl p-4">
               <p className="text-sm text-yellow-300 font-semibold mb-2">
-                Your creator profile is ready but not published yet.
+                Your creator profile is ready to submit for approval.
               </p>
 
               <button
@@ -253,128 +399,42 @@ export default function ProfilePage() {
                 }}
                 className="w-full bg-white text-black p-3 rounded-2xl font-bold"
               >
-                Go to Creator Studio to publish
+                Submit your creator profile for approval
               </button>
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col justify-center min-h-[110px]">
-              <p className="text-sm text-zinc-500">Plan</p>
-              <p className="text-2xl font-bold flex items-center gap-2 mt-2 whitespace-nowrap">
-                {subscriptionStatus === "active" ? (
-                  <>
-                    Premium <span>💎</span>
-                  </>
-                ) : (
-                  "Free"
-                )}
+          {creatorWaitingApproval && (
+            <div className="bg-yellow-950/30 border border-yellow-900 rounded-2xl p-4">
+              <p className="text-sm text-yellow-300 font-semibold">
+                Your creator profile has been submitted and is waiting for approval.
               </p>
             </div>
-
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex flex-col justify-center min-h-[110px]">
-              <p className="text-sm text-zinc-500">Voice minutes</p>
-              <p className="text-3xl font-bold mt-2">
-                {minutes}m {remainingSeconds}s
-              </p>
+          )}
             </div>
-          </div>
+          </section>
 
+          <section>
+            <h2 className="text-xs uppercase tracking-wide text-zinc-500 mb-3">
+              Billing
+            </h2>
 
-          <button
-            onClick={() => {
-              router.push("/dashboard");
-            }}
-            className="w-full bg-white text-black p-4 rounded-2xl font-bold mb-3"
-          >
-            Creator Studio
-          </button>
-
-          {creatorUsername && (
+          <div>
             <button
-              onClick={() => {
-                router.push("/creator-earnings");
-              }}
-              className="w-full bg-zinc-900 border border-zinc-800 text-white p-4 rounded-2xl font-semibold mb-3"
+              onClick={runPrimaryBillingAction}
+              className="w-full bg-white text-black p-4 rounded-2xl font-bold"
             >
-              Creator Earnings
+              {primaryBillingLabel}
             </button>
-          )}
+          </div>
+          </section>
 
-          {!isPremium && !isCanceledOrPastDue && (
-            <>
-              <button
-                onClick={() => {
-                  router.push("/pricing");
-                }}
-                className="w-full bg-white text-black p-4 rounded-2xl font-bold mb-3"
-              >
-                Choose a plan
-              </button>
+          <section>
+            <h2 className="text-xs uppercase tracking-wide text-zinc-500 mb-3">
+              Support
+            </h2>
 
-              <button
-                onClick={() => {
-                  router.push("/pricing?mode=topup");
-                }}
-                className="w-full bg-zinc-900 border border-zinc-800 text-white p-4 rounded-2xl font-semibold mb-3"
-              >
-                Add voice minutes
-              </button>
-            </>
-          )}
-
-          {isPremium && (
-            <>
-              <button
-                onClick={() => {
-                  router.push("/pricing?mode=topup");
-                }}
-                className="w-full bg-white text-black p-4 rounded-2xl font-bold mb-3"
-              >
-                Add voice minutes
-              </button>
-
-              <button
-                onClick={openBillingPortal}
-                className="w-full bg-zinc-900 border border-zinc-800 text-white p-4 rounded-2xl font-semibold mb-3"
-              >
-                {isOutOfMinutes
-                  ? "Upgrade or manage plan"
-                  : "Manage subscription"}
-              </button>
-            </>
-          )}
-
-          {isCanceledOrPastDue && (
-            <>
-              <button
-                onClick={() => {
-                  router.push("/pricing");
-                }}
-                className="w-full bg-white text-black p-4 rounded-2xl font-bold mb-3"
-              >
-                Reactivate subscription
-              </button>
-
-              <button
-                onClick={() => {
-                  router.push("/pricing?mode=topup");
-                }}
-                className="w-full bg-zinc-900 border border-zinc-800 text-white p-4 rounded-2xl font-semibold mb-3"
-              >
-                Add voice minutes
-              </button>
-            </>
-          )}
-
-          <button
-            onClick={logout}
-            className="w-full bg-zinc-900 border border-zinc-800 text-white p-4 rounded-2xl font-semibold"
-          >
-            Logout
-          </button>
-
-          <div className="mt-6 border-t border-zinc-900 pt-5 text-sm text-zinc-500">
+          <div className="border border-zinc-900 rounded-3xl p-5 text-sm text-zinc-500">
             <p className="mb-4">
               Support:{" "}
               <a
@@ -415,6 +475,14 @@ export default function ProfilePage() {
               </button>
             </div>
           </div>
+          </section>
+
+          <button
+            onClick={logout}
+            className="w-full bg-zinc-900 border border-zinc-800 text-white p-4 rounded-2xl font-semibold"
+          >
+            Logout
+          </button>
         </div>
 
         <BottomNav />
