@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { supabase } from "@/lib/supabase";
+import { trackEvent } from "@/services/analytics";
 
 import AudioPlayer from "@/components/audio/AudioPlayer";
 
@@ -52,6 +53,16 @@ export default function CreatorProfilePage({
                 .single();
 
             setCreator(data);
+            if (data) {
+                trackEvent({
+                    eventType: "creator_profile_opened",
+                    entityType: "creator",
+                    entityId: data.id,
+                    metadata: {
+                        username: data.username,
+                    },
+                });
+            }
             setLoading(false);
         }
 
@@ -200,6 +211,14 @@ export default function CreatorProfilePage({
 
                 <button
                     onClick={() => {
+                        trackEvent({
+                            eventType: "creator_profile_start_chat_clicked",
+                            entityType: "creator",
+                            entityId: creator.id,
+                            metadata: {
+                                username: creator.username,
+                            },
+                        });
                         router.push(`/chat/${creator.username}`);
                     }}
                     className="w-full bg-white text-black py-4 rounded-3xl font-bold text-lg shadow-2xl active:scale-[0.99] transition"
@@ -212,6 +231,14 @@ export default function CreatorProfilePage({
                         try {
                             await navigator.clipboard.writeText(window.location.href);
                             setCopyStatus("copied");
+                            trackEvent({
+                                eventType: "creator_profile_shared",
+                                entityType: "creator",
+                                entityId: creator.id,
+                                metadata: {
+                                    source: "public_creator_profile",
+                                },
+                            });
                         } catch (error) {
                             console.error("Failed to copy creator link:", error);
                             setCopyStatus("failed");

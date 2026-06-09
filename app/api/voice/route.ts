@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { ElevenLabsClient } from "elevenlabs";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { trackServerEvent } from "@/lib/serverAnalytics";
 
 const MAX_VOICE_TEXT_LENGTH = 500;
 const DAILY_VOICE_LIMIT = 60;
@@ -8,6 +9,26 @@ const ALLOW_VOICE_MOCK = process.env.ALLOW_VOICE_MOCK === "true";
 
 export async function POST(request: Request) {
   let lockedUserId: string | null = null;
+  let analyticsUserId: string | null = null;
+  let analyticsConversationId: string | null = null;
+  let analyticsCreatorId: string | null = null;
+
+  async function trackVoiceFailed(
+    reason: string,
+    metadata: Record<string, unknown> = {}
+  ) {
+    await trackServerEvent({
+      userId: analyticsUserId,
+      eventType: "voice_failed",
+      entityType: analyticsCreatorId ? "creator" : null,
+      entityId: analyticsCreatorId,
+      sessionId: analyticsConversationId,
+      metadata: {
+        reason,
+        ...metadata,
+      },
+    });
+  }
 
   try {
     const authHeader = request.headers.get("authorization");
@@ -31,6 +52,8 @@ export async function POST(request: Request) {
         { status: 401 }
       );
     }
+
+    analyticsUserId = user.id;
 
     const oneMinuteAgo = new Date(
       Date.now() - 60 * 1000
@@ -85,6 +108,8 @@ export async function POST(request: Request) {
 
     const text = String(body.text || "").slice(0, MAX_VOICE_TEXT_LENGTH);
     const conversationId = body.conversationId;
+    analyticsConversationId =
+      typeof conversationId === "string" ? conversationId : null;
     const estimatedSeconds = Math.max(
       1,
       Math.min(60, Number(body.estimatedSeconds || 3))
@@ -112,11 +137,15 @@ export async function POST(request: Request) {
       .single();
 
     if (!conversation) {
+      await trackVoiceFailed("invalid_conversation");
+
       return NextResponse.json(
         { error: "Forbidden" },
         { status: 403 }
       );
     }
+
+    analyticsCreatorId = conversation.creator_id;
 
     const { data: creator } = await supabaseAdmin
       .from("creators")
@@ -131,6 +160,8 @@ export async function POST(request: Request) {
       .single();
 
     if (!profile || profile.voice_seconds_remaining <= 0) {
+      await trackVoiceFailed("out_of_minutes");
+
       return NextResponse.json(
         { error: "Out of voice minutes" },
         { status: 402 }
@@ -144,6 +175,8 @@ export async function POST(request: Request) {
           mock: true,
         });
       }
+
+      await trackVoiceFailed("missing_voice_id");
 
       return NextResponse.json(
         { error: "Creator voice is not configured" },
@@ -160,6 +193,8 @@ export async function POST(request: Request) {
           mock: true,
         });
       }
+
+      await trackVoiceFailed("missing_api_key");
 
       return NextResponse.json(
         { error: "ElevenLabs API key is not configured" },
@@ -180,6 +215,8 @@ export async function POST(request: Request) {
           fallback: true,
         });
       }
+
+      await trackVoiceFailed("lock_exists");
 
       return NextResponse.json(
         { error: "Voice generation already in progress" },
@@ -228,6 +265,8 @@ export async function POST(request: Request) {
         });
       }
 
+      await trackVoiceFailed("upload_failed");
+
       return NextResponse.json(
         { error: "Voice upload failed" },
         { status: 500 }
@@ -257,6 +296,19 @@ export async function POST(request: Request) {
 
     lockedUserId = null;
 
+    await trackServerEvent({
+      userId: user.id,
+      eventType: "voice_generated",
+      entityType: "creator",
+      entityId: conversation.creator_id,
+      sessionId: conversationId,
+      metadata: {
+        estimated_seconds: estimatedSeconds,
+        seconds_remaining: remainingAfterGeneration,
+        provider: "elevenlabs",
+      },
+    });
+
     return NextResponse.json({
       audioUrl: data.publicUrl,
       generated: true,
@@ -278,6 +330,8 @@ export async function POST(request: Request) {
         fallback: true,
       });
     }
+
+    await trackVoiceFailed("exception");
 
     return NextResponse.json(
       { error: "Voice generation failed" },

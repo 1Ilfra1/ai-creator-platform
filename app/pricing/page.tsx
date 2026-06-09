@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { trackEvent } from "@/services/analytics";
 
 type Plan = "starter" | "premium" | "vip";
 
@@ -12,6 +13,15 @@ export default function PricingPage() {
   const [subscriptionStatus, setSubscriptionStatus] = useState("free");
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    trackEvent({
+      eventType: "pricing_viewed",
+      metadata: {
+        mode: params.get("mode") || "plans",
+      },
+    });
+
     async function loadProfile() {
       const {
         data: { user },
@@ -33,8 +43,6 @@ export default function PricingPage() {
     }
 
     loadProfile();
-
-    const params = new URLSearchParams(window.location.search);
 
     if (params.get("mode") === "topup") {
       setTimeout(() => {
@@ -59,6 +67,13 @@ export default function PricingPage() {
     const {
       data: { session },
     } = await supabase.auth.getSession();
+
+    trackEvent({
+      eventType: "checkout_started",
+      metadata: {
+        plan,
+      },
+    });
 
     const response = await fetch("/api/stripe/checkout", {
       method: "POST",
@@ -91,6 +106,13 @@ export default function PricingPage() {
     const {
       data: { session },
     } = await supabase.auth.getSession();
+
+    trackEvent({
+      eventType: "topup_checkout_started",
+      metadata: {
+        pack,
+      },
+    });
 
     const response = await fetch("/api/stripe/topup", {
       method: "POST",

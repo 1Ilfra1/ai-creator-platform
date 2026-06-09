@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 import { supabase } from "@/lib/supabase";
+import { trackEvent } from "@/services/analytics";
 
 export default function DashboardPage() {
     const router = useRouter();
@@ -244,6 +245,14 @@ export default function DashboardPage() {
 
         setIsPublished(true);
         setSaveSuccess("");
+        trackEvent({
+            eventType: "creator_submitted",
+            entityType: "creator",
+            entityId: creatorId,
+            metadata: {
+                username: username.trim(),
+            },
+        });
 
         alert("Profile submitted for approval!");
     }
@@ -344,6 +353,17 @@ export default function DashboardPage() {
         if (data) {
             setCreatorId(data.id);
             setIsActive(data.is_active || false);
+            trackEvent({
+                eventType: "creator_profile_saved",
+                entityType: "creator",
+                entityId: data.id,
+                metadata: {
+                    is_update: Boolean(creatorId),
+                    has_profile_image: Boolean(profileImage),
+                    has_banner_image: Boolean(bannerImage),
+                    has_intro_audio: Boolean(introAudio),
+                },
+            });
         }
 
         setSaveSuccess("Creator profile saved. You can publish it when you are ready.");

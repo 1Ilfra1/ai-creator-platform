@@ -4,6 +4,7 @@ import { use, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { supabase } from "@/lib/supabase";
+import { trackEvent } from "@/services/analytics";
 import { buildCreatorSafetyPrompt } from "@/services/prompts";
 import AudioPlayer from "@/components/audio/AudioPlayer";
 import { motion } from "framer-motion";
@@ -50,6 +51,20 @@ export default function ChatPage({
     const bottomRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
     const sendingRef = useRef(false);
+
+    function openPaywall(reason: string) {
+        setShowPaywall(true);
+
+        trackEvent({
+            eventType: "paywall_shown",
+            entityType: creator ? "creator" : undefined,
+            entityId: creator?.id,
+            sessionId: conversationId || undefined,
+            metadata: {
+                reason,
+            },
+        });
+    }
 
     useEffect(() => {
         async function setupConversation() {
@@ -207,7 +222,7 @@ export default function ChatPage({
             remainingSeconds <= 0 &&
             subscriptionStatus !== "active"
         ) {
-            setShowPaywall(true);
+            openPaywall("free_minutes_exhausted");
             return;
         }
 
@@ -227,7 +242,7 @@ export default function ChatPage({
             .single();
 
         if (!profile || profile.voice_seconds_remaining <= 0) {
-            setShowPaywall(true);
+            openPaywall("minutes_exhausted");
             return;
         }
 
@@ -277,6 +292,16 @@ export default function ChatPage({
 
             if (savedUserMessage) {
                 setMessages((prev) => [...prev, savedUserMessage]);
+                trackEvent({
+                    eventType: "message_sent",
+                    entityType: "creator",
+                    entityId: creator.id,
+                    sessionId: conversationId,
+                    metadata: {
+                        source: prefilledText ? "suggested_reply" : "typed",
+                        message_length: text.length,
+                    },
+                });
             }
         } catch (error) {
             console.error("Failed to send message:", error);
@@ -386,7 +411,7 @@ export default function ChatPage({
                     voiceFallback = true;
 
                     if (voiceResponse.status === 402) {
-                        setShowPaywall(true);
+                        openPaywall("voice_minutes_exhausted");
                         setVoiceNotice("You're out of voice minutes.");
                     } else if (voiceResponse.status === 429) {
                         setVoiceNotice("Voice limit reached. Try again later.");
@@ -475,8 +500,7 @@ export default function ChatPage({
         (message) => message.sender_type === "user"
     );
     const isWaitingForReply =
-        isTyping ||
-        messages[messages.length - 1]?.sender_type === "user";
+        isTyping;
     const canReplayAudio =
         subscriptionStatus === "active" ||
         remainingSeconds > 0 ||
@@ -623,7 +647,7 @@ export default function ChatPage({
                                     <AudioPlayer audioUrl={message.audio_url} />
                                 ) : (
                                     <button
-                                        onClick={() => setShowPaywall(true)}
+                                        onClick={() => openPaywall("audio_replay_locked")}
                                         className="w-[230px] max-w-full bg-zinc-950/80 border border-zinc-800 rounded-3xl px-3 py-3 mt-3 text-left"
                                     >
                                         <div className="flex items-center gap-3">

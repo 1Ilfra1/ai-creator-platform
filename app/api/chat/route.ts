@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { trackServerEvent } from "@/lib/serverAnalytics";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -26,6 +27,10 @@ function getFallbackReply() {
 }
 
 export async function POST(request: Request) {
+  let analyticsUserId: string | null = null;
+  let analyticsConversationId: string | null = null;
+  let analyticsCreatorId: string | null = null;
+
   try {
     if (process.env.EMERGENCY_MODE === "true") {
       return NextResponse.json(
@@ -54,6 +59,8 @@ export async function POST(request: Request) {
         { status: 401 }
       );
     }
+
+    analyticsUserId = user.id;
 
     const oneMinuteAgo = new Date(
       Date.now() - 60 * 1000
@@ -118,6 +125,8 @@ export async function POST(request: Request) {
         : rawMessage;
 
     const conversationId = body.conversationId;
+    analyticsConversationId =
+      typeof conversationId === "string" ? conversationId : null;
 
     if (!conversationId) {
       return NextResponse.json(
@@ -139,6 +148,8 @@ export async function POST(request: Request) {
         { status: 403 }
       );
     }
+
+    analyticsCreatorId = conversation.creator_id;
 
     const { data: creator } = await supabaseAdmin
       .from("creators")
@@ -186,6 +197,18 @@ export async function POST(request: Request) {
     }
 
     if (process.env.AI_MODE === "mock") {
+      await trackServerEvent({
+        userId: user.id,
+        eventType: "ai_reply_generated",
+        entityType: "creator",
+        entityId: conversation.creator_id,
+        sessionId: conversationId,
+        metadata: {
+          fallback: true,
+          mode: "mock",
+        },
+      });
+
       return NextResponse.json({
         reply: getFallbackReply(),
         fallback: true,
@@ -304,11 +327,34 @@ IMPORTANT RULES:
       }
     }
 
+    await trackServerEvent({
+      userId: user.id,
+      eventType: "ai_reply_generated",
+      entityType: "creator",
+      entityId: conversation.creator_id,
+      sessionId: conversationId,
+      metadata: {
+        fallback: false,
+        reply_length: reply.length,
+      },
+    });
+
     return NextResponse.json({
       reply,
     });
   } catch (error) {
     console.error("AI chat failed:", error);
+
+    await trackServerEvent({
+      userId: analyticsUserId,
+      eventType: "ai_reply_failed",
+      entityType: analyticsCreatorId ? "creator" : null,
+      entityId: analyticsCreatorId,
+      sessionId: analyticsConversationId,
+      metadata: {
+        reason: "exception",
+      },
+    });
 
     return NextResponse.json({
       reply: getFallbackReply(),

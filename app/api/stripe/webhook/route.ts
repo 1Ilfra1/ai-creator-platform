@@ -4,6 +4,7 @@ import Stripe from "stripe";
 
 import { stripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { trackServerEvent } from "@/lib/serverAnalytics";
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
@@ -124,6 +125,17 @@ export async function POST(req: Request) {
 
         if (error) {
           console.error("Top-up update failed:", error);
+        } else {
+          await trackServerEvent({
+            userId,
+            eventType: "purchase_completed",
+            metadata: {
+              purchase_type: "topup",
+              topup_pack: topupPack,
+              seconds_added: topupSeconds,
+              stripe_event_id: event.id,
+            },
+          });
         }
 
         return NextResponse.json({
@@ -149,6 +161,17 @@ export async function POST(req: Request) {
 
       if (error) {
         console.error("Subscription update failed:", error);
+      } else {
+        await trackServerEvent({
+          userId,
+          eventType: "purchase_completed",
+          metadata: {
+            purchase_type: "subscription",
+            plan,
+            seconds_granted: monthlySeconds,
+            stripe_event_id: event.id,
+          },
+        });
       }
     }
   }

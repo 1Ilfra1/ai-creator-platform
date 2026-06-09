@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdminUser } from "@/lib/admin";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { trackServerEvent } from "@/lib/serverAnalytics";
 
 export async function POST(
   request: Request,
@@ -50,6 +51,13 @@ export async function POST(
         { status: 500 }
       );
     }
+
+    await trackServerEvent({
+      userId: admin.user.id,
+      eventType: "creator_approved",
+      entityType: "creator",
+      entityId: id,
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

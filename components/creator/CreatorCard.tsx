@@ -1,6 +1,7 @@
 "use client";
 
 import { PublicCreator } from "@/types/creator";
+import { trackEvent } from "@/services/analytics";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -22,6 +23,16 @@ export default function CreatorCard({
   }
 
   function handleStartChat() {
+    trackEvent({
+      eventType: "creator_profile_start_chat_clicked",
+      entityType: "creator",
+      entityId: creator.id,
+      metadata: {
+        source: "creator_card",
+        username: creator.username,
+      },
+    });
+
     router.push(`/chat/${creator.username}`);
   }
 
@@ -31,6 +42,14 @@ export default function CreatorCard({
     try {
       await navigator.clipboard.writeText(link);
       setCopyStatus("copied");
+      trackEvent({
+        eventType: "creator_profile_shared",
+        entityType: "creator",
+        entityId: creator.id,
+        metadata: {
+          source: "creator_card",
+        },
+      });
     } catch (error) {
       console.error("Failed to copy creator link:", error);
       setCopyStatus("failed");
