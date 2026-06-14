@@ -19,6 +19,19 @@ export async function POST(
 
     const { id } = await params;
 
+    const { data: creator, error: creatorError } = await supabaseAdmin
+      .from("creators")
+      .select("voice_id")
+      .eq("id", id)
+      .single();
+
+    if (creatorError || !creator?.voice_id) {
+      return NextResponse.json(
+        { error: "Save a valid ElevenLabs voice ID before approving creator" },
+        { status: 400 }
+      );
+    }
+
     const { error: publishError } = await supabaseAdmin
       .from("creators")
       .update({

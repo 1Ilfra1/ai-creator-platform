@@ -203,9 +203,13 @@ export default function CreatorProfilePage({
 
                     </div>
 
-                    <AudioPlayer
-                        audioUrl={creator.intro_audio || "/mock-voice.mp3"}
-                    />
+                    {creator.intro_audio ? (
+                        <AudioPlayer audioUrl={creator.intro_audio} />
+                    ) : (
+                        <p className="text-sm text-zinc-500">
+                            No intro yet
+                        </p>
+                    )}
 
                 </div>
 

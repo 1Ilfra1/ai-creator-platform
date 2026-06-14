@@ -9,6 +9,9 @@ const openai = new OpenAI({
 
 const MAX_MESSAGE_LENGTH = 500;
 const DAILY_CHAT_LIMIT = 100;
+const MAX_CREATOR_TAGLINE_LENGTH = 500;
+const MAX_CREATOR_STYLE_LENGTH = 1500;
+const MAX_MEMORY_TEXT_LENGTH = 1500;
 
 const fallbackReplies = [
   "I’m here with you 💜",
@@ -158,8 +161,14 @@ export async function POST(request: Request) {
       .single();
 
     const creatorName = creator?.display_name || "Creator";
-    const creatorTagline = creator?.tagline || "";
-    const creatorStyle = creator?.personality_prompt || "";
+    const creatorTagline = (creator?.tagline || "").slice(
+      0,
+      MAX_CREATOR_TAGLINE_LENGTH
+    );
+    const creatorStyle = (creator?.personality_prompt || "").slice(
+      0,
+      MAX_CREATOR_STYLE_LENGTH
+    );
 
     const recentMessages = Array.isArray(body.recentMessages)
       ? body.recentMessages
@@ -185,9 +194,9 @@ export async function POST(request: Request) {
       .limit(5);
 
     memoryText =
-      memories
+      (memories
         ?.map((item) => item.memory)
-        .join("\n") || "";
+        .join("\n") || "").slice(0, MAX_MEMORY_TEXT_LENGTH);
 
     if (!message) {
       return NextResponse.json(
@@ -356,9 +365,9 @@ IMPORTANT RULES:
       },
     });
 
-    return NextResponse.json({
-      reply: getFallbackReply(),
-      fallback: true,
-    });
+    return NextResponse.json(
+      { error: "AI reply generation failed" },
+      { status: 502 }
+    );
   }
 }

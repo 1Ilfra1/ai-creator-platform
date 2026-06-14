@@ -36,6 +36,7 @@ export default function ChatPage({
     const router = useRouter();
 
     const [creator, setCreator] = useState<Creator | null>(null);
+    const [creatorUnavailable, setCreatorUnavailable] = useState(false);
     const [conversationId, setConversationId] = useState<string | null>(null);
     const [messages, setMessages] = useState<Message[]>([]);
     const [expandedMessages, setExpandedMessages] = useState<string[]>([]);
@@ -103,10 +104,12 @@ export default function ChatPage({
 
             if (creatorError || !creatorData) {
                 console.error(creatorError);
+                setCreatorUnavailable(true);
                 return;
             }
 
             setCreator(creatorData);
+            setCreatorUnavailable(false);
 
             const { data: existingConversation } = await supabase
                 .from("conversations")
@@ -178,7 +181,7 @@ export default function ChatPage({
                         conversation_id: newConversation.id,
                         sender_type: "ai",
                         text: introMessage,
-                        audio_url: creatorData.intro_audio || "/mock-voice.mp3",
+                        audio_url: creatorData.intro_audio || null,
                     })
                     .select()
                     .single();
@@ -205,15 +208,12 @@ export default function ChatPage({
                 ? prefilledText.trim()
                 : input.trim();
 
-        const lastMessage = messages[messages.length - 1];
-
         if (
             !messageText ||
             !conversationId ||
             !creator ||
             isTyping ||
-            sendingRef.current ||
-            lastMessage?.sender_type === "user"
+            sendingRef.current
         ) {
             return;
         }
@@ -358,13 +358,6 @@ export default function ChatPage({
 
                 const isFallback = aiData.fallback || false;
                 const aiText = aiData.reply || "Tell me more.";
-                const wordCount = aiText.trim().split(/\s+/).length;
-
-                const estimatedSeconds = Math.min(
-                    30,
-                    Math.max(3, Math.ceil(wordCount / 2.5))
-                );
-
                 const voiceText =
                     aiText.length > 500
                         ? `${aiText.slice(0, 500)}...`
@@ -383,7 +376,6 @@ export default function ChatPage({
                     body: JSON.stringify({
                         text: voiceText,
                         conversationId,
-                        estimatedSeconds,
                     }),
                 });
 
@@ -391,6 +383,7 @@ export default function ChatPage({
                 let audioUrl: string | null = null;
                 let voiceGenerated = false;
                 let voiceFallback = false;
+                let chargedSeconds: number | null = null;
 
                 if (voiceResponse.ok) {
                     audioUrl = voiceData.audio
@@ -400,6 +393,10 @@ export default function ChatPage({
                     if (audioUrl) {
                         voiceGenerated = voiceData.generated || false;
                         voiceFallback = voiceData.fallback || false;
+                        chargedSeconds =
+                            typeof voiceData.chargedSeconds === "number"
+                                ? voiceData.chargedSeconds
+                                : null;
                         setVoiceNotice(null);
                     } else {
                         voiceFallback = true;
@@ -436,7 +433,7 @@ export default function ChatPage({
                         sender_type: "ai",
                         text: aiText,
                         audio_url: audioUrl,
-                        audio_duration_seconds: estimatedSeconds,
+                        audio_duration_seconds: chargedSeconds,
                         is_fallback: isFallback,
                         voice_generated: voiceGenerated,
                         voice_fallback: voiceFallback,
@@ -461,6 +458,24 @@ export default function ChatPage({
                 setIsTyping(false);
             }
         }, 900);
+    }
+
+    if (creatorUnavailable) {
+        return (
+            <main className="min-h-screen bg-black text-white flex items-center justify-center p-6">
+                <div className="max-w-sm text-center">
+                    <h1 className="text-2xl font-bold mb-3">
+                        Creator chat is not available.
+                    </h1>
+                    <button
+                        onClick={() => router.push("/")}
+                        className="w-full bg-white text-black py-3 rounded-2xl font-semibold"
+                    >
+                        Explore creators
+                    </button>
+                </div>
+            </main>
+        );
     }
 
     if (!creator) {

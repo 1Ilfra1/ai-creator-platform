@@ -14,7 +14,9 @@ export default function CreatorCard({
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
 
   function handlePreview() {
-    const audio = new Audio(creator.intro_audio || "/mock-voice.mp3");
+    if (!creator.intro_audio) return;
+
+    const audio = new Audio(creator.intro_audio);
     audio.play();
   }
 
@@ -119,9 +121,10 @@ export default function CreatorCard({
                 e.stopPropagation();
                 handlePreview();
               }}
-              className="rounded-2xl bg-zinc-800 py-3 text-xs font-semibold hover:bg-zinc-700 transition"
+              disabled={!creator.intro_audio}
+              className="rounded-2xl bg-zinc-800 py-3 text-xs font-semibold hover:bg-zinc-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              ▶ Voice
+              {creator.intro_audio ? "Voice" : "No intro"}
             </button>
 
             <button

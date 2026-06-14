@@ -15,6 +15,10 @@ interface CreatorReview {
   profile_image: string | null;
   banner_image: string | null;
   intro_audio: string | null;
+  instagram_handle: string | null;
+  voice_sample_path: string | null;
+  voice_sample_url: string | null;
+  voice_id: string | null;
   is_published: boolean | null;
   is_active: boolean | null;
   created_at: string | null;
@@ -33,6 +37,8 @@ export default function AdminPage() {
   const [voiceMessages, setVoiceMessages] = useState(0);
   const [pendingCreators, setPendingCreators] = useState<CreatorReview[]>([]);
   const [liveCreators, setLiveCreators] = useState<CreatorReview[]>([]);
+  const [voiceInputs, setVoiceInputs] = useState<Record<string, string>>({});
+  const [voiceStatuses, setVoiceStatuses] = useState<Record<string, string>>({});
 
   async function getAccessToken() {
     const {
@@ -62,6 +68,14 @@ export default function AdminPage() {
 
     setPendingCreators(data.pending || []);
     setLiveCreators(data.live || []);
+
+    const nextVoiceInputs: Record<string, string> = {};
+    [...(data.pending || []), ...(data.live || [])].forEach(
+      (creator: CreatorReview) => {
+        nextVoiceInputs[creator.id] = creator.voice_id || "";
+      }
+    );
+    setVoiceInputs(nextVoiceInputs);
   }
 
   useEffect(() => {
@@ -140,6 +154,93 @@ export default function AdminPage() {
     }
   }
 
+  async function validateCreatorVoiceId(creatorId: string) {
+    const token = await getAccessToken();
+    const voiceId = voiceInputs[creatorId]?.trim();
+
+    if (!token || !voiceId) return;
+
+    try {
+      setVoiceStatuses((prev) => ({
+        ...prev,
+        [creatorId]: "Checking voice ID...",
+      }));
+
+      const response = await fetch("/api/elevenlabs/validate-voice", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          voiceId,
+        }),
+      });
+
+      const data = await response.json();
+
+      setVoiceStatuses((prev) => ({
+        ...prev,
+        [creatorId]:
+          response.ok && data.valid
+            ? "Voice ID valid"
+            : data.error || "Voice ID not found or unavailable",
+      }));
+    } catch (error) {
+      console.error("Voice ID validation failed:", error);
+      setVoiceStatuses((prev) => ({
+        ...prev,
+        [creatorId]: "Voice ID not found or unavailable",
+      }));
+    }
+  }
+
+  async function saveCreatorVoiceId(creatorId: string) {
+    const token = await getAccessToken();
+    const voiceId = voiceInputs[creatorId]?.trim();
+
+    if (!token || !voiceId) return;
+
+    try {
+      setActionLoading(`voice-${creatorId}`);
+
+      const response = await fetch(`/api/admin/creators/${creatorId}/voice`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          voiceId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setVoiceStatuses((prev) => ({
+          ...prev,
+          [creatorId]: data.error || "Failed to save Voice ID",
+        }));
+        return;
+      }
+
+      setVoiceStatuses((prev) => ({
+        ...prev,
+        [creatorId]: "Voice ID saved",
+      }));
+      await loadCreatorReviews();
+    } catch (error) {
+      console.error("Voice ID save failed:", error);
+      setVoiceStatuses((prev) => ({
+        ...prev,
+        [creatorId]: "Failed to save Voice ID",
+      }));
+    } finally {
+      setActionLoading("");
+    }
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen bg-black text-white flex items-center justify-center">
@@ -194,11 +295,25 @@ export default function AdminPage() {
           emptyText="No pending creators"
           creators={pendingCreators}
           actionLoading={actionLoading}
+          voiceInputs={voiceInputs}
+          voiceStatuses={voiceStatuses}
+          onVoiceInputChange={(creatorId, value) => {
+            setVoiceInputs((prev) => ({
+              ...prev,
+              [creatorId]: value,
+            }));
+            setVoiceStatuses((prev) => ({
+              ...prev,
+              [creatorId]: "",
+            }));
+          }}
+          onValidateVoiceId={validateCreatorVoiceId}
+          onSaveVoiceId={saveCreatorVoiceId}
           actions={(creator) => (
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => runCreatorAction(creator.id, "approve")}
-                disabled={Boolean(actionLoading)}
+                disabled={Boolean(actionLoading) || !creator.voice_id}
                 className="bg-green-500 text-black rounded-2xl py-3 font-bold disabled:opacity-50"
               >
                 Approve
@@ -220,6 +335,20 @@ export default function AdminPage() {
           emptyText="No live creators"
           creators={liveCreators}
           actionLoading={actionLoading}
+          voiceInputs={voiceInputs}
+          voiceStatuses={voiceStatuses}
+          onVoiceInputChange={(creatorId, value) => {
+            setVoiceInputs((prev) => ({
+              ...prev,
+              [creatorId]: value,
+            }));
+            setVoiceStatuses((prev) => ({
+              ...prev,
+              [creatorId]: "",
+            }));
+          }}
+          onValidateVoiceId={validateCreatorVoiceId}
+          onSaveVoiceId={saveCreatorVoiceId}
           actions={(creator) => (
             <button
               onClick={() => runCreatorAction(creator.id, "deactivate")}
@@ -240,12 +369,22 @@ function CreatorReviewSection({
   emptyText,
   creators,
   actionLoading,
+  voiceInputs,
+  voiceStatuses,
+  onVoiceInputChange,
+  onValidateVoiceId,
+  onSaveVoiceId,
   actions,
 }: {
   title: string;
   emptyText: string;
   creators: CreatorReview[];
   actionLoading: string;
+  voiceInputs: Record<string, string>;
+  voiceStatuses: Record<string, string>;
+  onVoiceInputChange: (creatorId: string, value: string) => void;
+  onValidateVoiceId: (creatorId: string) => void;
+  onSaveVoiceId: (creatorId: string) => void;
   actions: (creator: CreatorReview) => ReactNode;
 }) {
   return (
@@ -293,6 +432,12 @@ function CreatorReviewSection({
                     @{creator.username || "username"}
                   </p>
 
+                  {creator.instagram_handle && (
+                    <p className="text-sm text-zinc-400 mt-2">
+                      Instagram: {creator.instagram_handle}
+                    </p>
+                  )}
+
                   <p className="text-sm text-zinc-300 mt-3">
                     {creator.tagline || creator.bio || "No description provided."}
                   </p>
@@ -304,6 +449,78 @@ function CreatorReviewSection({
                       className="w-full mt-4"
                     />
                   )}
+
+                  {creator.voice_sample_url ? (
+                    <div className="mt-4 rounded-2xl border border-zinc-800 bg-black p-3">
+                      <p className="text-xs text-zinc-500 mb-2">
+                        Private voice sample
+                      </p>
+                      <audio
+                        src={creator.voice_sample_url}
+                        controls
+                        className="w-full"
+                      />
+                      <a
+                        href={creator.voice_sample_url}
+                        download
+                        className="mt-3 inline-flex text-sm text-zinc-300 underline"
+                      >
+                        Download voice sample
+                      </a>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-red-300 mt-4">
+                      No voice sample uploaded.
+                    </p>
+                  )}
+
+                  <div className="mt-4 rounded-2xl border border-zinc-800 bg-black p-3">
+                    <label className="block text-xs text-zinc-500 mb-2">
+                      ElevenLabs Voice ID
+                    </label>
+                    <input
+                      value={voiceInputs[creator.id] || ""}
+                      onChange={(event) =>
+                        onVoiceInputChange(creator.id, event.target.value)
+                      }
+                      placeholder="Paste admin-created voice ID"
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm outline-none"
+                    />
+                    <div className="grid grid-cols-2 gap-2 mt-3">
+                      <button
+                        type="button"
+                        onClick={() => onValidateVoiceId(creator.id)}
+                        className="rounded-xl bg-zinc-800 border border-zinc-700 py-2 text-sm font-semibold"
+                      >
+                        Validate Voice ID
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onSaveVoiceId(creator.id)}
+                        disabled={actionLoading === `voice-${creator.id}`}
+                        className="rounded-xl bg-white text-black py-2 text-sm font-semibold disabled:opacity-50"
+                      >
+                        Save Voice ID
+                      </button>
+                    </div>
+                    {voiceStatuses[creator.id] && (
+                      <p
+                        className={`text-xs mt-2 ${
+                          voiceStatuses[creator.id].toLowerCase().includes("valid") ||
+                          voiceStatuses[creator.id].toLowerCase().includes("saved")
+                            ? "text-green-400"
+                            : "text-red-300"
+                        }`}
+                      >
+                        {voiceStatuses[creator.id]}
+                      </p>
+                    )}
+                    {creator.voice_id && (
+                      <p className="text-xs text-green-400 mt-2">
+                        Saved voice ID is ready for approval.
+                      </p>
+                    )}
+                  </div>
 
                   <p className="text-xs text-zinc-600 mt-3">
                     Submitted:{" "}

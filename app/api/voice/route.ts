@@ -110,9 +110,10 @@ export async function POST(request: Request) {
     const conversationId = body.conversationId;
     analyticsConversationId =
       typeof conversationId === "string" ? conversationId : null;
+    const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
     const estimatedSeconds = Math.max(
-      1,
-      Math.min(60, Number(body.estimatedSeconds || 3))
+      3,
+      Math.min(60, Math.ceil(wordCount / 2.5))
     );
 
     if (!text) {
@@ -159,11 +160,11 @@ export async function POST(request: Request) {
       .eq("id", user.id)
       .single();
 
-    if (!profile || profile.voice_seconds_remaining <= 0) {
+    if (!profile || profile.voice_seconds_remaining < estimatedSeconds) {
       await trackVoiceFailed("out_of_minutes");
 
       return NextResponse.json(
-        { error: "Out of voice minutes" },
+        { error: "Not enough voice minutes" },
         { status: 402 }
       );
     }
@@ -312,6 +313,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       audioUrl: data.publicUrl,
       generated: true,
+      chargedSeconds: estimatedSeconds,
       secondsRemaining: remainingAfterGeneration,
     });
   } catch (error) {

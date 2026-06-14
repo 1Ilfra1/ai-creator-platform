@@ -3,7 +3,33 @@ import { requireAdminUser } from "@/lib/admin";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const CREATOR_REVIEW_FIELDS =
-  "id, username, display_name, tagline, bio, profile_image, banner_image, intro_audio, is_published, is_active, created_at";
+  "id, username, display_name, tagline, bio, profile_image, banner_image, intro_audio, instagram_handle, voice_sample_path, voice_id, is_published, is_active, created_at";
+
+async function attachVoiceSampleUrls(creators: any[] = []) {
+  return Promise.all(
+    creators.map(async (creator) => {
+      if (!creator.voice_sample_path) {
+        return {
+          ...creator,
+          voice_sample_url: null,
+        };
+      }
+
+      const { data, error } = await supabaseAdmin.storage
+        .from("creator-voice-samples")
+        .createSignedUrl(creator.voice_sample_path, 60 * 15);
+
+      if (error) {
+        console.error("Failed to create voice sample signed URL:", error);
+      }
+
+      return {
+        ...creator,
+        voice_sample_url: data?.signedUrl || null,
+      };
+    })
+  );
+}
 
 export async function GET(request: Request) {
   try {
@@ -50,8 +76,8 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      pending: pendingResult.data || [],
-      live: liveResult.data || [],
+      pending: await attachVoiceSampleUrls(pendingResult.data || []),
+      live: await attachVoiceSampleUrls(liveResult.data || []),
     });
   } catch (error) {
     console.error("Admin creator list failed:", error);

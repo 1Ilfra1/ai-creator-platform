@@ -49,7 +49,7 @@ export default function ProfilePage() {
         const { data: creator } = await supabase
           .from("creators")
           .select(
-            "username, display_name, tagline, personality_prompt, voice_id, is_published, is_active"
+            "username, display_name, tagline, personality_prompt, instagram_handle, voice_sample_path, voice_consent_at, is_published, is_active"
           )
           .eq("user_id", user.id)
           .maybeSingle();
@@ -59,7 +59,9 @@ export default function ProfilePage() {
           creator.display_name &&
           creator.tagline &&
           creator.personality_prompt &&
-          creator.voice_id
+          creator.instagram_handle &&
+          creator.voice_sample_path &&
+          creator.voice_consent_at
         );
 
         if (creator && creatorComplete && creator.is_published && creator.is_active) {
@@ -103,7 +105,7 @@ export default function ProfilePage() {
 
     const { data: creator } = await supabase
       .from("creators")
-      .select("id, display_name, tagline, personality_prompt, voice_id, is_published, is_active")
+      .select("id, display_name, tagline, personality_prompt, instagram_handle, voice_sample_path, voice_consent_at, is_published, is_active")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -116,6 +118,11 @@ export default function ProfilePage() {
         .eq("id", creator.id);
 
       if (creatorSyncError) {
+        if (creatorSyncError.code === "23505") {
+          alert("Your creator profile could not be updated because this username is already in use. Change it in Profile settings first.");
+          return;
+        }
+
         console.error(creatorSyncError);
         alert("Failed to sync your creator username. Please try again.");
         return;
@@ -130,6 +137,11 @@ export default function ProfilePage() {
       .eq("id", user.id);
 
     if (error) {
+      if (error.code === "23505") {
+        alert("This username is already taken. Please choose another one.");
+        return;
+      }
+
       console.error(error);
       alert("Failed to update username.");
       return;
@@ -143,7 +155,9 @@ export default function ProfilePage() {
       creator.display_name &&
       creator.tagline &&
       creator.personality_prompt &&
-      creator.voice_id
+      creator.instagram_handle &&
+      creator.voice_sample_path &&
+      creator.voice_consent_at
     );
 
     if (creatorComplete && creator?.is_published && creator.is_active) {

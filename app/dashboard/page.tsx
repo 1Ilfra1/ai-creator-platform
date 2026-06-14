@@ -22,28 +22,30 @@ export default function DashboardPage() {
     const [profileImage, setProfileImage] = useState("");
     const [bannerImage, setBannerImage] = useState("");
     const [introAudio, setIntroAudio] = useState("");
-    const [voiceId, setVoiceId] = useState("");
-    const [voiceValidationStatus, setVoiceValidationStatus] = useState<
-        "idle" | "checking" | "valid" | "invalid" | "malformed"
-    >("idle");
-    const [voiceValidationMessage, setVoiceValidationMessage] = useState("");
+    const [instagramHandle, setInstagramHandle] = useState("");
+    const [voiceSamplePath, setVoiceSamplePath] = useState("");
+    const [voiceConsentAt, setVoiceConsentAt] = useState<string | null>(null);
+    const [voiceConsentChecked, setVoiceConsentChecked] = useState(false);
     const [uploadingAudio, setUploadingAudio] = useState(false);
     const [uploadingProfileImage, setUploadingProfileImage] = useState(false);
     const [uploadingBannerImage, setUploadingBannerImage] = useState(false);
+    const [uploadingVoiceSample, setUploadingVoiceSample] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState("");
     const [tagline, setTagline] = useState("");
     const [personalityPrompt, setPersonalityPrompt] = useState("");
     const usernameValid = /^[a-zA-Z0-9_-]{3,30}$/.test(username.trim());
-    const voiceIdFormatValid = /^[A-Za-z0-9_-]{10,64}$/.test(voiceId.trim());
     const profileComplete = Boolean(
         usernameValid &&
         displayName.trim() &&
         tagline.trim() &&
         personalityPrompt.trim() &&
-        voiceValidationStatus === "valid"
+        instagramHandle.trim() &&
+        voiceSamplePath &&
+        voiceConsentAt
     );
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
     const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
+    const MAX_VOICE_SAMPLE_SIZE = 10 * 1024 * 1024;
 
     const ALLOWED_IMAGE_TYPES = [
         "image/jpeg",
@@ -54,6 +56,13 @@ export default function DashboardPage() {
     const ALLOWED_AUDIO_TYPES = [
         "audio/mpeg",
         "audio/mp3",
+    ];
+
+    const ALLOWED_VOICE_SAMPLE_TYPES = [
+        "audio/mpeg",
+        "audio/wav",
+        "audio/mp4",
+        "audio/x-m4a",
     ];
 
     useEffect(() => {
@@ -100,7 +109,10 @@ export default function DashboardPage() {
                     setProfileImage(data.profile_image || "");
                     setBannerImage(data.banner_image || "");
                     setIntroAudio(data.intro_audio || "");
-                    setVoiceId(data.voice_id || "");
+                    setInstagramHandle(data.instagram_handle || "");
+                    setVoiceSamplePath(data.voice_sample_path || "");
+                    setVoiceConsentAt(data.voice_consent_at || null);
+                    setVoiceConsentChecked(Boolean(data.voice_consent_at));
                 }
             } catch (error) {
                 console.error("Failed to load creator:", error);
@@ -226,87 +238,81 @@ export default function DashboardPage() {
         }
     }
 
-    async function publishProfile() {
+    function getAudioDuration(file: File) {
+        return new Promise<number>((resolve, reject) => {
+            const audio = document.createElement("audio");
+            const objectUrl = URL.createObjectURL(file);
 
-        if (!creatorId) return;
+            audio.preload = "metadata";
+            audio.onloadedmetadata = () => {
+                URL.revokeObjectURL(objectUrl);
+                resolve(audio.duration);
+            };
+            audio.onerror = () => {
+                URL.revokeObjectURL(objectUrl);
+                reject(new Error("Could not read audio duration."));
+            };
+            audio.src = objectUrl;
+        });
+    }
 
-        const { error } = await supabase
-            .from("creators")
-            .update({
-                is_published: true,
-            })
-            .eq("id", creatorId);
+    async function uploadVoiceSample(
+        event: React.ChangeEvent<HTMLInputElement>
+    ) {
+        const file = event.target.files?.[0];
 
-        if (error) {
-            console.error(error);
-            alert("Failed to publish profile.");
+        if (!file || !currentUserId) return;
+
+        if (file.size > MAX_VOICE_SAMPLE_SIZE) {
+            alert("Voice sample file too large.");
             return;
         }
 
-        setIsPublished(true);
-        setSaveSuccess("");
-        trackEvent({
-            eventType: "creator_submitted",
-            entityType: "creator",
-            entityId: creatorId,
-            metadata: {
-                username: username.trim(),
-            },
-        });
+        const fileNameLower = file.name.toLowerCase();
+        const isAllowedVoiceSample =
+            ALLOWED_VOICE_SAMPLE_TYPES.includes(file.type) ||
+            fileNameLower.endsWith(".mp3") ||
+            fileNameLower.endsWith(".wav") ||
+            fileNameLower.endsWith(".m4a") ||
+            fileNameLower.endsWith(".mp4");
 
-        alert("Profile submitted for approval!");
-    }
-
-    function handleVoiceIdChange(value: string) {
-        setVoiceId(value);
-        setVoiceValidationStatus("idle");
-        setVoiceValidationMessage("");
-    }
-
-    async function verifyVoiceId() {
-        const nextVoiceId = voiceId.trim();
-
-        if (!nextVoiceId || !voiceIdFormatValid) {
-            setVoiceValidationStatus("malformed");
-            setVoiceValidationMessage("Invalid Voice ID format");
+        if (!isAllowedVoiceSample) {
+            alert("Please upload an MP3, WAV, M4A, or MP4 audio file.");
             return;
         }
 
         try {
-            setVoiceValidationStatus("checking");
-            setVoiceValidationMessage("");
+            setUploadingVoiceSample(true);
 
-            const {
-                data: { session },
-            } = await supabase.auth.getSession();
+            const duration = await getAudioDuration(file);
 
-            const response = await fetch("/api/elevenlabs/validate-voice", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${session?.access_token}`,
-                },
-                body: JSON.stringify({
-                    voiceId: nextVoiceId,
-                }),
-            });
-
-            const data = await response.json();
-
-            if (response.ok && data.valid) {
-                setVoiceValidationStatus("valid");
-                setVoiceValidationMessage("Voice ID verified ✓");
+            if (duration < 20 || duration > 30) {
+                alert("Please upload a voice sample between 20 and 30 seconds.");
                 return;
             }
 
-            setVoiceValidationStatus("invalid");
-            setVoiceValidationMessage(
-                data.error || "Voice ID not found or unavailable"
-            );
+            const fileExt = file.name.split(".").pop();
+            const fileName =
+                `${currentUserId}/${creatorId || currentUserId}-${Date.now()}.${fileExt}`;
+
+            const { error } = await supabase.storage
+                .from("creator-voice-samples")
+                .upload(fileName, file, {
+                    upsert: false,
+                });
+
+            if (error) {
+                console.error(error);
+                alert("Failed to upload voice sample.");
+                return;
+            }
+
+            setVoiceSamplePath(fileName);
         } catch (error) {
-            console.error("Failed to verify voice ID:", error);
-            setVoiceValidationStatus("invalid");
-            setVoiceValidationMessage("Voice ID not found or unavailable");
+            console.error(error);
+            alert("Voice sample upload failed.");
+        } finally {
+            setUploadingVoiceSample(false);
         }
     }
 
@@ -315,12 +321,11 @@ export default function DashboardPage() {
         if (!currentUserId) return;
 
         if (!profileComplete) {
-            alert("Complete all required creator profile fields and verify the Voice ID first.");
+            alert("Complete all required creator profile fields, upload your 20-30 second voice sample, and confirm voice consent first.");
             return;
         }
 
-        const creatorPayload = {
-            user_id: currentUserId,
+        const creatorFields = {
             username: username.trim(),
             display_name: displayName.trim(),
             tagline: tagline.trim(),
@@ -328,23 +333,41 @@ export default function DashboardPage() {
             profile_image: profileImage,
             banner_image: bannerImage,
             intro_audio: introAudio,
-            voice_id: voiceId.trim(),
+            instagram_handle: instagramHandle.trim(),
+            voice_sample_path: voiceSamplePath,
+            voice_consent_at: voiceConsentAt,
         };
+
+        const shouldSubmitForApproval = !isActive;
+        const creatorPayload = shouldSubmitForApproval
+            ? {
+                ...creatorFields,
+                is_published: true,
+            }
+            : creatorFields;
 
         const { data, error } = creatorId
             ? await supabase
                 .from("creators")
                 .update(creatorPayload)
                 .eq("id", creatorId)
-                .select("id, is_active")
+                .select("id")
                 .single()
             : await supabase
                 .from("creators")
-                .insert(creatorPayload)
-                .select("id, is_active")
+                .insert({
+                    ...creatorPayload,
+                    user_id: currentUserId,
+                })
+                .select("id")
                 .single();
 
         if (error) {
+            if (error.code === "23505") {
+                alert("Your creator profile could not be updated because this username is already in use. Change it in Profile settings first.");
+                return;
+            }
+
             console.error(error);
             alert("Failed to save creator profile.");
             return;
@@ -352,7 +375,10 @@ export default function DashboardPage() {
 
         if (data) {
             setCreatorId(data.id);
-            setIsActive(data.is_active || false);
+            if (shouldSubmitForApproval) {
+                setIsPublished(true);
+                setIsActive(false);
+            }
             trackEvent({
                 eventType: "creator_profile_saved",
                 entityType: "creator",
@@ -364,9 +390,24 @@ export default function DashboardPage() {
                     has_intro_audio: Boolean(introAudio),
                 },
             });
+
+            if (shouldSubmitForApproval) {
+                trackEvent({
+                    eventType: "creator_submitted",
+                    entityType: "creator",
+                    entityId: data.id,
+                    metadata: {
+                        username: username.trim(),
+                    },
+                });
+            }
         }
 
-        setSaveSuccess("Creator profile saved. You can publish it when you are ready.");
+        setSaveSuccess(
+            shouldSubmitForApproval
+                ? "Creator application submitted for approval."
+                : "Creator profile updated."
+        );
     }
 
     if (loading) {
@@ -376,6 +417,14 @@ export default function DashboardPage() {
             </main>
         );
     }
+
+    const primaryActionLabel = isActive
+        ? "Update creator profile"
+        : isPublished
+            ? "Update application"
+            : creatorId
+                ? "Submit again"
+                : "Submit for approval";
 
     return (
         <ProtectedRoute>
@@ -526,6 +575,20 @@ export default function DashboardPage() {
                         Make people feel comfortable and emotionally heard.`}
                         />
                     </div>
+
+                    <div>
+                        <label className="block text-sm mb-2">
+                            Instagram handle
+                        </label>
+
+                        <input
+                            value={instagramHandle}
+                            onChange={(e) => setInstagramHandle(e.target.value)}
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
+                            placeholder="@yourhandle"
+                        />
+                    </div>
+
                     <div>
                         <label className="block text-sm mb-2">
                             Profile image (JPG, PNG, WebP)
@@ -629,59 +692,61 @@ export default function DashboardPage() {
 
                     <div className="border border-zinc-800 rounded-3xl p-5 bg-zinc-900/60">
                         <h3 className="text-lg font-semibold mb-2">
-                            AI Voice Setup
+                            AI voice onboarding
                         </h3>
 
                         <p className="text-sm text-zinc-400 mb-4">
-                            Paste the ElevenLabs voice ID your AI creator will use for generated replies.
+                            Upload a clear voice sample between 20 and 30 seconds. Use a quiet room, no music, no background noise.
                         </p>
 
                         <input
-                            value={voiceId}
-                            onChange={(e) => handleVoiceIdChange(e.target.value)}
-                            type="text"
-                            placeholder="ElevenLabs voice ID"
-                            className="w-full bg-black border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
+                            id="voice-sample-upload"
+                            type="file"
+                            accept="audio/mpeg,audio/wav,audio/mp4,audio/x-m4a,.mp3,.wav,.m4a,.mp4"
+                            onChange={uploadVoiceSample}
+                            className="sr-only"
                         />
-
-                        <button
-                            type="button"
-                            onClick={verifyVoiceId}
-                            disabled={!voiceId.trim() || voiceValidationStatus === "checking"}
-                            className="mt-3 rounded-2xl bg-white text-black px-4 py-3 text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+                        <label
+                            htmlFor="voice-sample-upload"
+                            className="inline-flex bg-black border border-zinc-800 rounded-2xl px-4 py-3 font-semibold cursor-pointer"
                         >
-                            Verify voice ID
-                        </button>
+                            Choose voice sample
+                        </label>
 
-                        {voiceId && voiceValidationStatus === "idle" && (
+                        {uploadingVoiceSample && (
                             <p className="text-sm text-zinc-500 mt-2">
-                                Voice ID saved — verify before publishing.
+                                Uploading voice sample...
                             </p>
                         )}
 
-                        {voiceValidationStatus === "checking" && (
-                            <p className="text-sm text-zinc-500 mt-2">
-                                Checking voice ID...
-                            </p>
-                        )}
-
-                        {voiceValidationStatus === "valid" && (
+                        {voiceSamplePath && (
                             <p className="text-sm text-green-400 mt-2">
-                                {voiceValidationMessage}
+                                Voice sample uploaded
                             </p>
                         )}
 
-                        {(voiceValidationStatus === "invalid" ||
-                            voiceValidationStatus === "malformed") && (
-                            <p className="text-sm text-red-400 mt-2">
-                                {voiceValidationMessage}
-                            </p>
-                        )}
+                        <label className="flex items-start gap-3 mt-5 text-sm text-zinc-300">
+                            <input
+                                type="checkbox"
+                                checked={voiceConsentChecked}
+                                onChange={(event) => {
+                                    const checked = event.target.checked;
+                                    setVoiceConsentChecked(checked);
+                                    setVoiceConsentAt(
+                                        checked ? new Date().toISOString() : null
+                                    );
+                                }}
+                                className="mt-1"
+                            />
+                            <span>
+                                I confirm this is my own voice and I allow this platform to create and use an AI voice clone for my creator profile.
+                            </span>
+                        </label>
 
                         <div className="space-y-2 text-xs text-zinc-500 mt-5">
-                            <p>• Use a voice you own or have permission to use</p>
-                            <p>• This voice will generate AI replies</p>
-                            <p>• Intro voice message is separate from AI reply voice</p>
+                            <p>Admin will manually create and review your AI voice clone.</p>
+                            <p>Fans will not access your uploaded voice sample.</p>
+                            <p>Intro voice message is separate from generated AI replies.</p>
                         </div>
                     </div>
 
@@ -690,7 +755,7 @@ export default function DashboardPage() {
                         disabled={!profileComplete}
                         className="w-full bg-white text-black py-4 rounded-2xl font-bold disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                        {creatorId ? "Update creator profile" : "Create creator profile"}
+                        {primaryActionLabel}
                     </button>
 
                     {saveSuccess && (
@@ -715,7 +780,9 @@ export default function DashboardPage() {
                                 <p>{displayName.trim() ? "✅" : "⬜"} Display name</p>
                                 <p>{tagline.trim() ? "✅" : "⬜"} Creator description</p>
                                 <p>{personalityPrompt.trim() ? "✅" : "⬜"} Personality setup</p>
-                                <p>{voiceValidationStatus === "valid" ? "✅" : "⬜"} Verified ElevenLabs voice ID</p>
+                                <p>{instagramHandle.trim() ? "✅" : "⬜"} Instagram handle</p>
+                                <p>{voiceSamplePath ? "✅" : "⬜"} 20-30 second voice sample</p>
+                                <p>{voiceConsentAt ? "✅" : "⬜"} Voice consent</p>
 
                                 <p className="text-xs uppercase tracking-wide text-zinc-500 pt-3">
                                     Optional
@@ -727,22 +794,15 @@ export default function DashboardPage() {
                         </div>
                     )}
 
-                    {creatorId && !isPublished && profileComplete && (
+                    {!isPublished && profileComplete && (
                         <div className="border border-green-900 bg-green-950/30 rounded-3xl p-5">
                             <h3 className="font-semibold text-green-300 mb-2">
                                 Ready to submit
                             </h3>
 
-                            <p className="text-sm text-zinc-400 mb-4">
-                                Submit your profile for approval so fans can find it after approval.
+                            <p className="text-sm text-zinc-400">
+                                Use the primary button above to submit your creator application for approval.
                             </p>
-
-                            <button
-                                onClick={publishProfile}
-                                className="w-full bg-white text-black py-4 rounded-2xl font-bold"
-                            >
-                                Submit for approval
-                            </button>
                         </div>
                     )}
 
