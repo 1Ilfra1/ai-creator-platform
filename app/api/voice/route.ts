@@ -6,6 +6,20 @@ import { trackServerEvent } from "@/lib/serverAnalytics";
 const MAX_VOICE_TEXT_LENGTH = 500;
 const DAILY_VOICE_LIMIT = 60;
 const ALLOW_VOICE_MOCK = process.env.ALLOW_VOICE_MOCK === "true";
+const ELEVENLABS_MODEL_ID = "eleven_multilingual_v2";
+const ELEVENLABS_COST_PER_1000_CHARS_USD = Number(
+  process.env.ELEVENLABS_COST_PER_1000_CHARS_USD || "0"
+);
+
+function estimateElevenLabsCost(text: string) {
+  if (!Number.isFinite(ELEVENLABS_COST_PER_1000_CHARS_USD)) {
+    return null;
+  }
+
+  return Number(
+    ((text.length / 1000) * ELEVENLABS_COST_PER_1000_CHARS_USD).toFixed(6)
+  );
+}
 
 export async function POST(request: Request) {
   let lockedUserId: string | null = null;
@@ -231,7 +245,7 @@ export async function POST(request: Request) {
 
     const audio = await elevenlabs.textToSpeech.convert(creator.voice_id, {
       text,
-      model_id: "eleven_multilingual_v2",
+      model_id: ELEVENLABS_MODEL_ID,
     });
 
     const chunks: Buffer[] = [];
@@ -305,6 +319,10 @@ export async function POST(request: Request) {
       sessionId: conversationId,
       metadata: {
         estimated_seconds: estimatedSeconds,
+        charged_seconds: estimatedSeconds,
+        tts_characters: text.length,
+        provider_model: ELEVENLABS_MODEL_ID,
+        provider_cost_estimate: estimateElevenLabsCost(text),
         seconds_remaining: remainingAfterGeneration,
         provider: "elevenlabs",
       },
