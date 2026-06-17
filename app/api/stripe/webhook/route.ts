@@ -17,7 +17,6 @@ const PLAN_SECONDS: Record<string, number> = {
 const TOPUP_SECONDS: Record<string, number> = {
   "30": 1800,
   "60": 3600,
-  "120": 7200,
 };
 
 export async function POST(req: Request) {

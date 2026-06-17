@@ -7,10 +7,15 @@ import { trackEvent } from "@/services/analytics";
 
 type Plan = "starter" | "premium" | "vip";
 
+const ACTIVE_PAID_PLANS = ["starter", "premium", "vip"];
+const TOPUP_SUBSCRIBER_ONLY_ERROR =
+  "Top-up purchases are available only for active subscribers.";
+
 export default function PricingPage() {
   const router = useRouter();
   const topupRef = useRef<HTMLDivElement | null>(null);
   const [subscriptionStatus, setSubscriptionStatus] = useState("free");
+  const [plan, setPlan] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -31,7 +36,7 @@ export default function PricingPage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("subscription_status")
+        .select("subscription_status, plan")
         .eq("id", user.id)
         .single();
 
@@ -39,6 +44,7 @@ export default function PricingPage() {
         setSubscriptionStatus(
           profile.subscription_status || "free"
         );
+        setPlan(profile.plan || null);
       }
     }
 
@@ -93,7 +99,12 @@ export default function PricingPage() {
     }
   }
 
-  async function buyTopup(pack: "30" | "60" | "120") {
+  async function buyTopup(pack: "30" | "60") {
+    if (!canBuyTopups) {
+      alert(TOPUP_SUBSCRIBER_ONLY_ERROR);
+      return;
+    }
+
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -134,11 +145,19 @@ export default function PricingPage() {
 
   const pricingContext =
     subscriptionStatus === "active"
-      ? "Add extra minutes or manage your monthly plan from Profile."
+      ? "Add extra minutes if your monthly plan is active, or manage your plan from Profile."
       : subscriptionStatus === "canceled" ||
         subscriptionStatus === "past_due"
-        ? "Reactivate a plan or add minutes anytime."
-        : "Choose a monthly plan or add minutes anytime.";
+        ? "Reactivate a plan to add extra minutes."
+        : "Choose a monthly plan first. Top-ups are available for active subscribers.";
+
+  const canBuyTopups =
+    subscriptionStatus === "active" &&
+    ACTIVE_PAID_PLANS.includes(plan || "");
+
+  const topupButtonClass = canBuyTopups
+    ? "w-full bg-zinc-900 border border-zinc-700 p-4 rounded-2xl text-left hover:border-zinc-500 transition"
+    : "w-full bg-zinc-950 border border-zinc-800 p-4 rounded-2xl text-left opacity-50 cursor-not-allowed";
 
   return (
     <main className="min-h-screen bg-black text-white p-6 flex items-center justify-center">
@@ -245,34 +264,32 @@ export default function PricingPage() {
             Need more voice minutes?
           </h3>
 
+          {!canBuyTopups && (
+            <p className="text-sm text-zinc-500 mb-4">
+              {TOPUP_SUBSCRIBER_ONLY_ERROR}
+            </p>
+          )}
+
           <div className="space-y-3">
             <button
               onClick={() => buyTopup("30")}
-              className="w-full bg-zinc-900 border border-zinc-700 p-4 rounded-2xl text-left"
+              disabled={!canBuyTopups}
+              className={topupButtonClass}
             >
               <div className="flex items-center justify-between">
                 <span>+30 minutes</span>
-                <span>$7.99</span>
+                <span>$11.99</span>
               </div>
             </button>
 
             <button
               onClick={() => buyTopup("60")}
-              className="w-full bg-zinc-900 border border-zinc-700 p-4 rounded-2xl text-left"
+              disabled={!canBuyTopups}
+              className={topupButtonClass}
             >
               <div className="flex items-center justify-between">
                 <span>+60 minutes</span>
-                <span>$12.99</span>
-              </div>
-            </button>
-
-            <button
-              onClick={() => buyTopup("120")}
-              className="w-full bg-zinc-900 border border-zinc-700 p-4 rounded-2xl text-left"
-            >
-              <div className="flex items-center justify-between">
-                <span>+120 minutes</span>
-                <span>$22.99</span>
+                <span>$21.99</span>
               </div>
             </button>
           </div>

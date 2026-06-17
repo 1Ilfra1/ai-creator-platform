@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
+const ACTIVE_PAID_PLANS = new Set(["starter", "premium", "vip"]);
+const TOPUP_SUBSCRIBER_ONLY_ERROR =
+  "Top-up purchases are available only for active subscribers.";
+
 export async function POST(request: Request) {
   try {
     const authHeader = request.headers.get("authorization");
@@ -23,6 +27,23 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
+      );
+    }
+
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("subscription_status, plan")
+      .eq("id", user.id)
+      .single();
+
+    if (
+      profileError ||
+      profile?.subscription_status !== "active" ||
+      !ACTIVE_PAID_PLANS.has(profile?.plan || "")
+    ) {
+      return NextResponse.json(
+        { error: TOPUP_SUBSCRIBER_ONLY_ERROR },
+        { status: 403 }
       );
     }
 
@@ -61,7 +82,6 @@ export async function POST(request: Request) {
     const priceMap: Record<string, string | undefined> = {
       "30": process.env.STRIPE_30_MINUTES_PRICE_ID,
       "60": process.env.STRIPE_60_MINUTES_PRICE_ID,
-      "120": process.env.STRIPE_120_MINUTES_PRICE_ID,
     };
 
     const priceId = priceMap[pack];
