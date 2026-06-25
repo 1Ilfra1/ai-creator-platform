@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { trackEvent } from "@/services/analytics";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -51,6 +52,13 @@ export default function LoginPage() {
       return;
     }
 
+    trackEvent({
+      eventType: "signup",
+      metadata: {
+        method: "email",
+      },
+    });
+
     alert("Account created!");
   }
 
@@ -66,16 +74,31 @@ export default function LoginPage() {
       return;
     }
 
+    trackEvent({
+      eventType: "login",
+      metadata: {
+        method: "email",
+      },
+    });
+
     router.replace(getSafeNextPath());
   }
 
   async function signInWithGoogle() {
     const nextPath = getSafeNextPath();
+    const origin = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin;
+
+    trackEvent({
+      eventType: "google_login",
+      metadata: {
+        next_path: nextPath,
+      },
+    });
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/login?next=${encodeURIComponent(nextPath)}`,
+        redirectTo: `${origin}/login?next=${encodeURIComponent(nextPath)}`,
       },
     });
 

@@ -58,7 +58,7 @@ export default function ChatPage({
         setShowPaywall(true);
 
         trackEvent({
-            eventType: "paywall_shown",
+            eventType: "paywall_opened",
             entityType: creator ? "creator" : undefined,
             entityId: creator?.id,
             sessionId: conversationId || undefined,
@@ -198,6 +198,16 @@ export default function ChatPage({
             }
 
             setConversationId(newConversation.id);
+
+            trackEvent({
+                eventType: "chat_started",
+                entityType: "creator",
+                entityId: creatorData.id,
+                sessionId: newConversation.id,
+                metadata: {
+                    username: creatorData.username,
+                },
+            });
 
             await generateFirstGreeting(
                 newConversation.id,
@@ -372,6 +382,17 @@ export default function ChatPage({
                         ? prev
                         : [...prev, savedGreeting]
                 );
+                trackEvent({
+                    eventType: "first_ai_greeting_generated",
+                    entityType: "creator",
+                    entityId: targetCreator.id,
+                    sessionId: targetConversationId,
+                    metadata: {
+                        voice_generated: voiceGenerated,
+                        voice_fallback: voiceFallback,
+                        charged_seconds: chargedSeconds,
+                    },
+                });
                 playSoftPing();
             }
         } catch (error) {
@@ -472,6 +493,10 @@ export default function ChatPage({
                 .single();
 
             if (savedUserMessage) {
+                const isFirstUserMessage = !messages.some(
+                    (message) => message.sender_type === "user"
+                );
+
                 setMessages((prev) => [...prev, savedUserMessage]);
                 trackEvent({
                     eventType: "message_sent",
@@ -483,6 +508,19 @@ export default function ChatPage({
                         message_length: text.length,
                     },
                 });
+
+                if (isFirstUserMessage) {
+                    trackEvent({
+                        eventType: "first_user_message",
+                        entityType: "creator",
+                        entityId: creator.id,
+                        sessionId: conversationId,
+                        metadata: {
+                            source: prefilledText ? "suggested_reply" : "typed",
+                            message_length: text.length,
+                        },
+                    });
+                }
             }
         } catch (error) {
             console.error("Failed to send message:", error);
@@ -628,6 +666,17 @@ export default function ChatPage({
 
                 if (savedAiMessage) {
                     setMessages((prev) => [...prev, savedAiMessage]);
+                    trackEvent({
+                        eventType: "chat_completed",
+                        entityType: "creator",
+                        entityId: creator.id,
+                        sessionId: conversationId,
+                        metadata: {
+                            voice_generated: voiceGenerated,
+                            voice_fallback: voiceFallback,
+                            charged_seconds: chargedSeconds,
+                        },
+                    });
                     playSoftPing();
                 }
 

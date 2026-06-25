@@ -207,7 +207,20 @@ export default function CreatorProfilePage({
                     {creator.intro_audio ? (
                         <AudioPlayer
                             audioUrl={creator.intro_audio}
-                            onPlay={() => setIntroPreviewStarted(true)}
+                            onPlay={() => {
+                                if (!introPreviewStarted) {
+                                    trackEvent({
+                                        eventType: "creator_preview_played",
+                                        entityType: "creator",
+                                        entityId: creator.id,
+                                        metadata: {
+                                            source: "public_creator_profile",
+                                            username: creator.username,
+                                        },
+                                    });
+                                }
+                                setIntroPreviewStarted(true);
+                            }}
                             onEnded={() => setIntroPreviewStarted(true)}
                         />
                     ) : (
@@ -221,7 +234,7 @@ export default function CreatorProfilePage({
                 <button
                     onClick={() => {
                         trackEvent({
-                            eventType: "creator_profile_start_chat_clicked",
+                            eventType: "start_chat_clicked",
                             entityType: "creator",
                             entityId: creator.id,
                             metadata: {
@@ -241,11 +254,20 @@ export default function CreatorProfilePage({
 
                 <button
                     onClick={async () => {
+                        trackEvent({
+                            eventType: "share_profile_clicked",
+                            entityType: "creator",
+                            entityId: creator.id,
+                            metadata: {
+                                source: "public_creator_profile",
+                            },
+                        });
+
                         try {
                             await navigator.clipboard.writeText(window.location.href);
                             setCopyStatus("copied");
                             trackEvent({
-                                eventType: "creator_profile_shared",
+                                eventType: "creator_link_copied",
                                 entityType: "creator",
                                 entityId: creator.id,
                                 metadata: {

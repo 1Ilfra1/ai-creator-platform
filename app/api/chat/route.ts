@@ -389,6 +389,17 @@ CONVERSATION STYLE:
       },
     });
 
+    await trackServerEvent({
+      userId: analyticsUserId,
+      eventType: "error_openai",
+      entityType: analyticsCreatorId ? "creator" : null,
+      entityId: analyticsCreatorId,
+      sessionId: analyticsConversationId,
+      metadata: {
+        reason: "exception",
+      },
+    });
+
     return NextResponse.json(
       { error: "AI reply generation failed" },
       { status: 502 }

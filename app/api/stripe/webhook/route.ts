@@ -124,12 +124,41 @@ export async function POST(req: Request) {
 
         if (error) {
           console.error("Top-up update failed:", error);
+          await trackServerEvent({
+            userId,
+            eventType: "error_payment",
+            metadata: {
+              reason: "topup_update_failed",
+              purchase_type: "topup",
+              topup_pack: topupPack,
+              stripe_event_id: event.id,
+            },
+          });
         } else {
           await trackServerEvent({
             userId,
             eventType: "purchase_completed",
             metadata: {
               purchase_type: "topup",
+              topup_pack: topupPack,
+              seconds_added: topupSeconds,
+              stripe_event_id: event.id,
+            },
+          });
+          await trackServerEvent({
+            userId,
+            eventType: "checkout_completed",
+            metadata: {
+              purchase_type: "topup",
+              topup_pack: topupPack,
+              seconds_added: topupSeconds,
+              stripe_event_id: event.id,
+            },
+          });
+          await trackServerEvent({
+            userId,
+            eventType: "minutes_purchased",
+            metadata: {
               topup_pack: topupPack,
               seconds_added: topupSeconds,
               stripe_event_id: event.id,
@@ -160,12 +189,41 @@ export async function POST(req: Request) {
 
       if (error) {
         console.error("Subscription update failed:", error);
+        await trackServerEvent({
+          userId,
+          eventType: "error_payment",
+          metadata: {
+            reason: "subscription_update_failed",
+            purchase_type: "subscription",
+            plan,
+            stripe_event_id: event.id,
+          },
+        });
       } else {
         await trackServerEvent({
           userId,
           eventType: "purchase_completed",
           metadata: {
             purchase_type: "subscription",
+            plan,
+            seconds_granted: monthlySeconds,
+            stripe_event_id: event.id,
+          },
+        });
+        await trackServerEvent({
+          userId,
+          eventType: "checkout_completed",
+          metadata: {
+            purchase_type: "subscription",
+            plan,
+            seconds_granted: monthlySeconds,
+            stripe_event_id: event.id,
+          },
+        });
+        await trackServerEvent({
+          userId,
+          eventType: "subscription_started",
+          metadata: {
             plan,
             seconds_granted: monthlySeconds,
             stripe_event_id: event.id,
@@ -191,6 +249,22 @@ export async function POST(req: Request) {
 
     if (error) {
       console.error("Subscription cancellation update failed:", error);
+      await trackServerEvent({
+        eventType: "error_payment",
+        metadata: {
+          reason: "subscription_cancellation_update_failed",
+          stripe_event_id: event.id,
+          stripe_subscription_id: subscriptionId,
+        },
+      });
+    } else {
+      await trackServerEvent({
+        eventType: "subscription_cancelled",
+        metadata: {
+          stripe_event_id: event.id,
+          stripe_subscription_id: subscriptionId,
+        },
+      });
     }
   }
 
@@ -225,6 +299,14 @@ export async function POST(req: Request) {
 
       if (error) {
         console.error("Monthly refill update failed:", error);
+        await trackServerEvent({
+          eventType: "error_payment",
+          metadata: {
+            reason: "monthly_refill_update_failed",
+            stripe_event_id: event.id,
+            stripe_subscription_id: subscriptionId,
+          },
+        });
       }
     }
   }
@@ -247,6 +329,14 @@ export async function POST(req: Request) {
 
       if (error) {
         console.error("Payment failed update failed:", error);
+        await trackServerEvent({
+          eventType: "error_payment",
+          metadata: {
+            reason: "payment_failed_update_failed",
+            stripe_event_id: event.id,
+            stripe_subscription_id: subscriptionId,
+          },
+        });
       }
     }
   }

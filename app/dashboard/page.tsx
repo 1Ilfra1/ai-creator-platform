@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import ProtectedRoute from "@/components/ProtectedRoute";
@@ -12,6 +12,7 @@ type VoiceValidationStatus = "idle" | "validating" | "valid" | "invalid";
 
 export default function DashboardPage() {
     const router = useRouter();
+    const applicationStartedTrackedRef = useRef(false);
 
     const [loading, setLoading] = useState(true);
 
@@ -126,6 +127,14 @@ export default function DashboardPage() {
                             "Saved Voice ID loaded. Validate it before submitting or updating your creator profile."
                         );
                     }
+                } else if (!applicationStartedTrackedRef.current) {
+                    applicationStartedTrackedRef.current = true;
+                    trackEvent({
+                        eventType: "creator_application_started",
+                        metadata: {
+                            source: "creator_studio",
+                        },
+                    });
                 }
             } catch (error) {
                 console.error("Failed to load creator:", error);
@@ -297,6 +306,15 @@ export default function DashboardPage() {
                     "Professional Voice Clone verified."
                 );
                 setVoiceName(data.voiceName || "");
+                trackEvent({
+                    eventType: "voice_id_validated",
+                    entityType: creatorId ? "creator" : undefined,
+                    entityId: creatorId || undefined,
+                    metadata: {
+                        category: data.category || null,
+                        is_professional_clone: data.isProfessionalClone ?? null,
+                    },
+                });
                 return;
             }
 
@@ -391,9 +409,19 @@ export default function DashboardPage() {
                 },
             });
 
+            trackEvent({
+                eventType: "creator_profile_completed",
+                entityType: "creator",
+                entityId: data.id,
+                metadata: {
+                    is_update: Boolean(creatorId),
+                    submitted_for_approval: shouldSubmitForApproval,
+                },
+            });
+
             if (shouldSubmitForApproval) {
                 trackEvent({
-                    eventType: "creator_submitted",
+                    eventType: "creator_application_submitted",
                     entityType: "creator",
                     entityId: data.id,
                     metadata: {

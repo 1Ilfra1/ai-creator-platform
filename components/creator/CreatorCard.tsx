@@ -23,6 +23,17 @@ export default function CreatorCard({
 
     try {
       await audio.play();
+      if (!previewStarted) {
+        trackEvent({
+          eventType: "creator_preview_played",
+          entityType: "creator",
+          entityId: creator.id,
+          metadata: {
+            source: "creator_card",
+            username: creator.username,
+          },
+        });
+      }
       setPreviewStarted(true);
     } catch (error) {
       console.error("Failed to play creator intro:", error);
@@ -35,7 +46,7 @@ export default function CreatorCard({
 
   function handleStartChat() {
     trackEvent({
-      eventType: "creator_profile_start_chat_clicked",
+      eventType: "start_chat_clicked",
       entityType: "creator",
       entityId: creator.id,
       metadata: {
@@ -50,11 +61,20 @@ export default function CreatorCard({
   async function handleShare() {
     const link = `${window.location.origin}/creator/${creator.username}`;
 
+    trackEvent({
+      eventType: "share_profile_clicked",
+      entityType: "creator",
+      entityId: creator.id,
+      metadata: {
+        source: "creator_card",
+      },
+    });
+
     try {
       await navigator.clipboard.writeText(link);
       setCopyStatus("copied");
       trackEvent({
-        eventType: "creator_profile_shared",
+        eventType: "creator_link_copied",
         entityType: "creator",
         entityId: creator.id,
         metadata: {

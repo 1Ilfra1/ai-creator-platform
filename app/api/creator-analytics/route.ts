@@ -88,7 +88,10 @@ export async function GET(request: Request) {
         count: "exact",
         head: true,
       })
-      .eq("event_type", "creator_profile_start_chat_clicked")
+      .in("event_type", [
+        "creator_profile_start_chat_clicked",
+        "start_chat_clicked",
+      ])
       .eq("entity_type", "creator")
       .eq("entity_id", creator.id);
 

@@ -33,7 +33,7 @@ export async function POST(request: Request) {
   ) {
     await trackServerEvent({
       userId: analyticsUserId,
-      eventType: "voice_failed",
+      eventType: "error_voice_generation",
       entityType: analyticsCreatorId ? "creator" : null,
       entityId: analyticsCreatorId,
       sessionId: analyticsConversationId,
@@ -325,6 +325,20 @@ export async function POST(request: Request) {
         provider_cost_estimate: estimateElevenLabsCost(text),
         seconds_remaining: remainingAfterGeneration,
         provider: "elevenlabs",
+      },
+    });
+
+    await trackServerEvent({
+      userId: user.id,
+      eventType: "minutes_consumed",
+      entityType: "creator",
+      entityId: conversation.creator_id,
+      sessionId: conversationId,
+      metadata: {
+        seconds_consumed: estimatedSeconds,
+        seconds_remaining: remainingAfterGeneration,
+        provider: "elevenlabs",
+        provider_model: ELEVENLABS_MODEL_ID,
       },
     });
 
