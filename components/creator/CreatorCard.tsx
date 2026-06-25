@@ -12,12 +12,21 @@ export default function CreatorCard({
 }) {
   const router = useRouter();
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+  const [previewStarted, setPreviewStarted] = useState(false);
 
-  function handlePreview() {
+  async function handlePreview() {
     if (!creator.intro_audio) return;
 
     const audio = new Audio(creator.intro_audio);
-    audio.play();
+    audio.onplay = () => setPreviewStarted(true);
+    audio.onended = () => setPreviewStarted(true);
+
+    try {
+      await audio.play();
+      setPreviewStarted(true);
+    } catch (error) {
+      console.error("Failed to play creator intro:", error);
+    }
   }
 
   function openProfile() {
@@ -122,9 +131,9 @@ export default function CreatorCard({
                 handlePreview();
               }}
               disabled={!creator.intro_audio}
-              className="rounded-2xl bg-zinc-800 py-3 text-xs font-semibold hover:bg-zinc-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              className="rounded-2xl bg-zinc-800 py-3 text-xs font-semibold hover:bg-zinc-700 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center"
             >
-              {creator.intro_audio ? "Voice" : "No intro"}
+              {creator.intro_audio ? "Play voice" : "No intro"}
             </button>
 
             <button
@@ -152,9 +161,13 @@ export default function CreatorCard({
               e.stopPropagation();
               handleStartChat();
             }}
-            className="w-full rounded-2xl bg-white text-black py-4 text-sm font-bold hover:bg-zinc-200 transition"
+            className={`w-full rounded-2xl py-4 text-sm font-bold transition ${
+              previewStarted
+                ? "bg-green-500 text-black hover:bg-green-400"
+                : "bg-white text-black hover:bg-zinc-200"
+            }`}
           >
-            Start chat
+            {previewStarted ? "Start chat now" : "Start chat"}
           </button>
         </div>
       </div>

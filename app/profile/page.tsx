@@ -49,7 +49,7 @@ export default function ProfilePage() {
         const { data: creator } = await supabase
           .from("creators")
           .select(
-            "username, display_name, tagline, personality_prompt, instagram_handle, voice_sample_path, voice_consent_at, is_published, is_active"
+            "username, display_name, tagline, personality_prompt, instagram_handle, voice_id, is_published, is_active"
           )
           .eq("user_id", user.id)
           .maybeSingle();
@@ -60,8 +60,7 @@ export default function ProfilePage() {
           creator.tagline &&
           creator.personality_prompt &&
           creator.instagram_handle &&
-          creator.voice_sample_path &&
-          creator.voice_consent_at
+          creator.voice_id
         );
 
         if (creator && creatorComplete && creator.is_published && creator.is_active) {
@@ -105,7 +104,7 @@ export default function ProfilePage() {
 
     const { data: creator } = await supabase
       .from("creators")
-      .select("id, display_name, tagline, personality_prompt, instagram_handle, voice_sample_path, voice_consent_at, is_published, is_active")
+      .select("id, display_name, tagline, personality_prompt, instagram_handle, voice_id, is_published, is_active")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -156,8 +155,7 @@ export default function ProfilePage() {
       creator.tagline &&
       creator.personality_prompt &&
       creator.instagram_handle &&
-      creator.voice_sample_path &&
-      creator.voice_consent_at
+      creator.voice_id
     );
 
     if (creatorComplete && creator?.is_published && creator.is_active) {
@@ -346,26 +344,6 @@ export default function ProfilePage() {
             </h2>
 
             <div className="space-y-3">
-              <button
-                onClick={() => {
-                  router.push("/dashboard");
-                }}
-                className="w-full bg-white text-black p-4 rounded-2xl font-bold"
-              >
-                Creator Studio
-              </button>
-
-              {creatorUsername && (
-                <button
-                  onClick={() => {
-                    router.push("/creator-earnings");
-                  }}
-                  className="w-full bg-zinc-900 border border-zinc-800 text-white p-4 rounded-2xl font-semibold"
-                >
-                  Creator Analytics
-                </button>
-              )}
-
           {creatorUsername && (
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
               <p className="text-sm text-zinc-500 mb-3">
@@ -400,6 +378,26 @@ export default function ProfilePage() {
               </div>
             </div>
           )}
+
+              <button
+                onClick={() => {
+                  router.push("/dashboard");
+                }}
+                className="w-full bg-white text-black p-4 rounded-2xl font-bold"
+              >
+                Creator Studio
+              </button>
+
+              {creatorUsername && (
+                <button
+                  onClick={() => {
+                    router.push("/creator-earnings");
+                  }}
+                  className="w-full bg-zinc-900 border border-zinc-800 text-white p-4 rounded-2xl font-semibold"
+                >
+                  Creator Analytics
+                </button>
+              )}
 
           {creatorReadyUnpublished && (
             <div className="bg-yellow-950/30 border border-yellow-900 rounded-2xl p-4">

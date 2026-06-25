@@ -155,9 +155,8 @@ export default function PricingPage() {
     subscriptionStatus === "active" &&
     ACTIVE_PAID_PLANS.includes(plan || "");
 
-  const topupButtonClass = canBuyTopups
-    ? "w-full bg-zinc-900 border border-zinc-700 p-4 rounded-2xl text-left hover:border-zinc-500 transition"
-    : "w-full bg-zinc-950 border border-zinc-800 p-4 rounded-2xl text-left opacity-50 cursor-not-allowed";
+  const topupButtonClass =
+    "w-full bg-zinc-900 border border-zinc-700 p-4 rounded-2xl text-left hover:border-zinc-500 transition";
 
   return (
     <main className="min-h-screen bg-black text-white p-6 flex items-center justify-center">
@@ -256,44 +255,38 @@ export default function PricingPage() {
           </div>
         </div>
 
-        <div
-          ref={topupRef}
-          className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5 mb-4 scroll-mt-6"
-        >
-          <h3 className="font-semibold mb-4">
-            Need more voice minutes?
-          </h3>
+        {canBuyTopups && (
+          <div
+            ref={topupRef}
+            className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5 mb-4 scroll-mt-6"
+          >
+            <h3 className="font-semibold mb-4">
+              Need more voice minutes?
+            </h3>
 
-          {!canBuyTopups && (
-            <p className="text-sm text-zinc-500 mb-4">
-              {TOPUP_SUBSCRIBER_ONLY_ERROR}
-            </p>
-          )}
+            <div className="space-y-3">
+              <button
+                onClick={() => buyTopup("30")}
+                className={topupButtonClass}
+              >
+                <div className="flex items-center justify-between">
+                  <span>+30 minutes</span>
+                  <span>$11.99</span>
+                </div>
+              </button>
 
-          <div className="space-y-3">
-            <button
-              onClick={() => buyTopup("30")}
-              disabled={!canBuyTopups}
-              className={topupButtonClass}
-            >
-              <div className="flex items-center justify-between">
-                <span>+30 minutes</span>
-                <span>$11.99</span>
-              </div>
-            </button>
-
-            <button
-              onClick={() => buyTopup("60")}
-              disabled={!canBuyTopups}
-              className={topupButtonClass}
-            >
-              <div className="flex items-center justify-between">
-                <span>+60 minutes</span>
-                <span>$21.99</span>
-              </div>
-            </button>
+              <button
+                onClick={() => buyTopup("60")}
+                className={topupButtonClass}
+              >
+                <div className="flex items-center justify-between">
+                  <span>+60 minutes</span>
+                  <span>$21.99</span>
+                </div>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         <p className="text-xs text-zinc-600 text-center">
           Payments are securely processed by Stripe. Support:

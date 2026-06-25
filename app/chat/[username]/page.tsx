@@ -52,6 +52,7 @@ export default function ChatPage({
     const bottomRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
     const sendingRef = useRef(false);
+    const greetingGenerationRef = useRef<string | null>(null);
 
     function openPaywall(reason: string) {
         setShowPaywall(true);
@@ -78,6 +79,8 @@ export default function ChatPage({
                 return;
             }
 
+            let availableVoiceSeconds = 0;
+
             const { data: profile } = await supabase
                 .from("profiles")
                 .select("subscription_status, voice_seconds_remaining, has_paid_before")
@@ -89,9 +92,9 @@ export default function ChatPage({
                     profile.subscription_status || "free"
                 );
 
-                setRemainingSeconds(
-                    profile.voice_seconds_remaining || 0
-                );
+                availableVoiceSeconds = profile.voice_seconds_remaining || 0;
+
+                setRemainingSeconds(availableVoiceSeconds);
 
                 setHasPaidBefore(profile.has_paid_before || false);
             }
@@ -127,7 +130,17 @@ export default function ChatPage({
                     .eq("conversation_id", existingConversation.id)
                     .order("created_at", { ascending: true });
 
-                setMessages(existingMessages || []);
+                const loadedMessages = existingMessages || [];
+                setMessages(loadedMessages);
+
+                if (loadedMessages.length === 0) {
+                    await generateFirstGreeting(
+                        existingConversation.id,
+                        creatorData,
+                        availableVoiceSeconds
+                    );
+                }
+
                 return;
             }
 
@@ -161,6 +174,23 @@ export default function ChatPage({
 
                 if (existingConversation) {
                     setConversationId(existingConversation.id);
+                    const { data: existingMessages } = await supabase
+                        .from("messages")
+                        .select("*")
+                        .eq("conversation_id", existingConversation.id)
+                        .order("created_at", { ascending: true });
+
+                    const loadedMessages = existingMessages || [];
+                    setMessages(loadedMessages);
+
+                    if (loadedMessages.length === 0) {
+                        await generateFirstGreeting(
+                            existingConversation.id,
+                            creatorData,
+                            availableVoiceSeconds
+                        );
+                    }
+
                     return;
                 }
 
@@ -169,30 +199,11 @@ export default function ChatPage({
 
             setConversationId(newConversation.id);
 
-            setIsTyping(true);
-
-            setTimeout(async () => {
-                const introMessage =
-                    `Hey... I'm really happy you're here 💜`;
-
-                const { data: savedIntroMessage } = await supabase
-                    .from("messages")
-                    .insert({
-                        conversation_id: newConversation.id,
-                        sender_type: "ai",
-                        text: introMessage,
-                        audio_url: creatorData.intro_audio || null,
-                    })
-                    .select()
-                    .single();
-
-                if (savedIntroMessage) {
-                    setMessages([savedIntroMessage]);
-                    playSoftPing();
-                }
-
-                setIsTyping(false);
-            }, 1200);
+            await generateFirstGreeting(
+                newConversation.id,
+                creatorData,
+                availableVoiceSeconds
+            );
         }
 
         setupConversation();
@@ -201,6 +212,176 @@ export default function ChatPage({
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages, isTyping]);
+
+    async function generateFirstGreeting(
+        targetConversationId: string,
+        targetCreator: Creator,
+        availableVoiceSeconds: number
+    ) {
+        if (greetingGenerationRef.current === targetConversationId) {
+            return;
+        }
+
+        greetingGenerationRef.current = targetConversationId;
+
+        const { count } = await supabase
+            .from("messages")
+            .select("*", {
+                count: "exact",
+                head: true,
+            })
+            .eq("conversation_id", targetConversationId);
+
+        if ((count || 0) > 0) {
+            greetingGenerationRef.current = null;
+            return;
+        }
+
+        if (availableVoiceSeconds <= 0) {
+            openPaywall("first_greeting_minutes_exhausted");
+            greetingGenerationRef.current = null;
+            return;
+        }
+
+        setIsTyping(true);
+        setVoiceNotice(`${targetCreator.display_name} is recording a voice message...`);
+
+        try {
+            const {
+                data: { session: chatSession },
+            } = await supabase.auth.getSession();
+
+            const aiResponse = await fetch("/api/chat", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${chatSession?.access_token}`,
+                },
+                body: JSON.stringify({
+                    message: "Start this new chat with a short warm first greeting.",
+                    conversationId: targetConversationId,
+                    recentMessages: [],
+                    isGreeting: true,
+                }),
+            });
+
+            const aiData = await aiResponse.json();
+
+            if (!aiResponse.ok) {
+                if (aiResponse.status === 401) {
+                    setVoiceNotice("Please log in again.");
+                } else if (aiResponse.status === 403) {
+                    setVoiceNotice("Chat session expired. Please refresh and try again.");
+                } else if (aiResponse.status === 429) {
+                    setVoiceNotice("Message limit reached. Try again later.");
+                } else {
+                    setVoiceNotice("Could not start the chat. Please try again.");
+                }
+
+                return;
+            }
+
+            const aiText = aiData.reply || `Hey, I'm really happy you're here. How's your day going?`;
+            const voiceText =
+                aiText.length > 500
+                    ? `${aiText.slice(0, 500)}...`
+                    : aiText;
+
+            const {
+                data: { session: voiceSession },
+            } = await supabase.auth.getSession();
+
+            const voiceResponse = await fetch("/api/voice", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${voiceSession?.access_token}`,
+                },
+                body: JSON.stringify({
+                    text: voiceText,
+                    conversationId: targetConversationId,
+                }),
+            });
+
+            const voiceData = await voiceResponse.json();
+            let audioUrl: string | null = null;
+            let voiceGenerated = false;
+            let voiceFallback = false;
+            let chargedSeconds: number | null = null;
+
+            if (voiceResponse.ok) {
+                audioUrl = voiceData.audio
+                    ? `data:${voiceData.mimeType};base64,${voiceData.audio}`
+                    : voiceData.audioUrl || null;
+
+                if (audioUrl) {
+                    voiceGenerated = voiceData.generated || false;
+                    voiceFallback = voiceData.fallback || false;
+                    chargedSeconds =
+                        typeof voiceData.chargedSeconds === "number"
+                            ? voiceData.chargedSeconds
+                            : null;
+                    setVoiceNotice(null);
+                } else {
+                    voiceFallback = true;
+                    setVoiceNotice("Greeting text was created, but voice could not be generated.");
+                }
+            } else {
+                voiceFallback = true;
+
+                if (voiceResponse.status === 402) {
+                    openPaywall("first_greeting_voice_minutes_exhausted");
+                    setVoiceNotice("You're out of voice minutes.");
+                    return;
+                }
+
+                if (voiceResponse.status === 429) {
+                    setVoiceNotice("Voice limit reached. Try again later.");
+                } else if (
+                    voiceResponse.status === 401 ||
+                    voiceResponse.status === 403
+                ) {
+                    setVoiceNotice("Could not generate voice. Please refresh and try again.");
+                } else {
+                    setVoiceNotice("Greeting text was created, but voice could not be generated.");
+                }
+            }
+
+            const { data: savedGreeting } = await supabase
+                .from("messages")
+                .insert({
+                    conversation_id: targetConversationId,
+                    sender_type: "ai",
+                    text: aiText,
+                    audio_url: audioUrl,
+                    audio_duration_seconds: chargedSeconds,
+                    is_fallback: aiData.fallback || false,
+                    voice_generated: voiceGenerated,
+                    voice_fallback: voiceFallback,
+                })
+                .select()
+                .single();
+
+            if (typeof voiceData.secondsRemaining === "number") {
+                setRemainingSeconds(voiceData.secondsRemaining);
+            }
+
+            if (savedGreeting) {
+                setMessages((prev) =>
+                    prev.some((message) => message.id === savedGreeting.id)
+                        ? prev
+                        : [...prev, savedGreeting]
+                );
+                playSoftPing();
+            }
+        } catch (error) {
+            console.error("Failed to generate first greeting:", error);
+            setVoiceNotice("Could not start the chat. Please try again.");
+        } finally {
+            setIsTyping(false);
+            greetingGenerationRef.current = null;
+        }
+    }
 
     async function sendMessage(prefilledText?: string) {
         const messageText =
@@ -511,6 +692,16 @@ export default function ChatPage({
         oscillator.stop(audioContext.currentTime + 0.15);
     }
 
+    function formatVoiceTime(seconds: number) {
+        const safeSeconds = Math.max(0, Math.floor(seconds));
+
+        if (safeSeconds < 60) {
+            return `${safeSeconds} sec left`;
+        }
+
+        return `${Math.floor(safeSeconds / 60)} min left`;
+    }
+
     const hasUserMessages = messages.some(
         (message) => message.sender_type === "user"
     );
@@ -527,9 +718,7 @@ export default function ChatPage({
                 <div className="px-4 py-2 border-b border-zinc-900 bg-zinc-950/60">
                     <div className="flex items-center justify-between text-xs text-zinc-500">
 
-                        <p>
-                            {Math.ceil(remainingSeconds / 60)} min left
-                        </p>
+                        <p>{formatVoiceTime(remainingSeconds)}</p>
 
                         <p>
                             {subscriptionStatus === "active"
@@ -702,10 +891,18 @@ export default function ChatPage({
 
                 {isTyping && (
                     <div className="flex justify-start">
-                        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl rounded-bl-md px-4 py-3 flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce" />
-                            <span className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce [animation-delay:120ms]" />
-                            <span className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce [animation-delay:240ms]" />
+                        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl rounded-bl-md px-4 py-3">
+                            {messages.length === 0 && (
+                                <p className="text-sm text-zinc-400 mb-2">
+                                    {creator.display_name} is recording a voice message...
+                                </p>
+                            )}
+
+                            <div className="flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce" />
+                                <span className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce [animation-delay:120ms]" />
+                                <span className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce [animation-delay:240ms]" />
+                            </div>
                         </div>
                     </div>
                 )}

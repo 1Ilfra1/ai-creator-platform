@@ -4,6 +4,7 @@ import { requireAdminUser } from "@/lib/admin";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const VOICE_ID_PATTERN = /^[A-Za-z0-9_-]{10,64}$/;
+const PROFESSIONAL_CATEGORY = "professional";
 
 export async function POST(
   request: Request,
@@ -41,7 +42,15 @@ export async function POST(
 
     const elevenlabs = new ElevenLabsClient({ apiKey });
 
-    await elevenlabs.voices.get(voiceId);
+    const voice = await elevenlabs.voices.get(voiceId);
+    const category = voice.category || voice.sharing?.category || undefined;
+
+    if (category !== PROFESSIONAL_CATEGORY) {
+      return NextResponse.json(
+        { error: "Voice ID must belong to a Professional Voice Clone" },
+        { status: 400 }
+      );
+    }
 
     const { error } = await supabaseAdmin
       .from("creators")
@@ -63,6 +72,8 @@ export async function POST(
       success: true,
       valid: true,
       voiceId,
+      voiceName: voice.name,
+      category,
     });
   } catch (error) {
     console.error("Admin voice ID validation failed:", error);

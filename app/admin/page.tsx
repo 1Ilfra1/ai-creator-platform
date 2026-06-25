@@ -183,8 +183,8 @@ export default function AdminPage() {
         ...prev,
         [creatorId]:
           response.ok && data.valid
-            ? "Voice ID valid"
-            : data.error || "Voice ID not found or unavailable",
+            ? data.message || "Professional Voice Clone verified."
+            : data.message || data.error || "Voice ID not found or unavailable",
       }));
     } catch (error) {
       console.error("Voice ID validation failed:", error);
@@ -450,10 +450,10 @@ function CreatorReviewSection({
                     />
                   )}
 
-                  {creator.voice_sample_url ? (
+                  {creator.voice_sample_url && (
                     <div className="mt-4 rounded-2xl border border-zinc-800 bg-black p-3">
                       <p className="text-xs text-zinc-500 mb-2">
-                        Private voice sample
+                        Legacy private voice sample
                       </p>
                       <audio
                         src={creator.voice_sample_url}
@@ -468,10 +468,6 @@ function CreatorReviewSection({
                         Download voice sample
                       </a>
                     </div>
-                  ) : (
-                    <p className="text-sm text-red-300 mt-4">
-                      No voice sample uploaded.
-                    </p>
                   )}
 
                   <div className="mt-4 rounded-2xl border border-zinc-800 bg-black p-3">
@@ -483,7 +479,7 @@ function CreatorReviewSection({
                       onChange={(event) =>
                         onVoiceInputChange(creator.id, event.target.value)
                       }
-                      placeholder="Paste admin-created voice ID"
+                      placeholder="Paste creator Professional Voice ID"
                       className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-sm outline-none"
                     />
                     <div className="grid grid-cols-2 gap-2 mt-3">
@@ -507,7 +503,8 @@ function CreatorReviewSection({
                       <p
                         className={`text-xs mt-2 ${
                           voiceStatuses[creator.id].toLowerCase().includes("valid") ||
-                          voiceStatuses[creator.id].toLowerCase().includes("saved")
+                          voiceStatuses[creator.id].toLowerCase().includes("saved") ||
+                          voiceStatuses[creator.id].toLowerCase().includes("verified")
                             ? "text-green-400"
                             : "text-red-300"
                         }`}

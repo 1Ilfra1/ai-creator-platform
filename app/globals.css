@@ -24,3 +24,25 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes creator-start-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(139, 92, 246, 0);
+  }
+
+  50% {
+    box-shadow: 0 0 28px rgba(139, 92, 246, 0.34),
+      0 0 52px rgba(59, 130, 246, 0.18);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .creator-start-glow {
+    animation: creator-start-breathe 3s ease-in-out infinite;
+  }
+
+  .creator-start-glow-strong {
+    animation-duration: 2.6s;
+  }
+}

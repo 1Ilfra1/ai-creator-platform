@@ -120,7 +120,11 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
-    const rawMessage = String(body.message || "");
+    const isGreeting = body.isGreeting === true;
+
+    const rawMessage = isGreeting
+      ? "Start this new chat with a short warm first greeting."
+      : String(body.message || "");
 
     const message =
       rawMessage.length > MAX_MESSAGE_LENGTH
@@ -160,7 +164,14 @@ export async function POST(request: Request) {
       .eq("id", conversation.creator_id)
       .single();
 
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("username")
+      .eq("id", user.id)
+      .single();
+
     const creatorName = creator?.display_name || "Creator";
+    const userName = profile?.username?.trim() || "";
     const creatorTagline = (creator?.tagline || "").slice(
       0,
       MAX_CREATOR_TAGLINE_LENGTH
@@ -231,7 +242,7 @@ export async function POST(request: Request) {
         {
           role: "system",
           content: `
-You are an AI voice presence inspired by ${creatorName}.
+You are an AI creator voice inspired by ${creatorName}. You are not the real creator.
 
 Creator description:
 ${creatorTagline}
@@ -242,24 +253,35 @@ ${creatorStyle}
 Known memory about this conversation:
 ${memoryText || "No long-term memory yet."}
 
-IMPORTANT RULES:
+SAFETY RULES:
 - Never claim to be human.
 - Never claim to be the real creator.
 - Never pretend this is a real private relationship.
-- Keep replies conversational, emotionally natural, and voice-friendly.
-- Avoid sounding robotic or overly formal.
+- If directly asked, be clear that you are an AI voice experience.
+- Do not make promises about real-world meetings, private access, or the real creator's actions.
+- Do not create sexual content involving minors or exploitative situations.
+
+CONVERSATION STYLE:
+- Sound like a real casual text or voice-note reply, not an assistant.
+- React directly to the user's last message first.
+- Use conversational English, natural contractions, and short sentences.
+- Be warm, emotionally responsive, smooth, and lightly playful.
+- A little flirty is okay when the user invites that energy, but keep it non-explicit.
 - Stay aligned with the creator's conversational vibe and energy.
 - Use recent conversation context naturally when relevant.
 - Use known memory naturally when relevant, but do not mention that you have a memory system.
-- Short to medium replies work best.
-- Keep replies under 2-4 short sentences.
-- Avoid long explanations.
+- Prefer 1-4 short sentences.
+- Ask an occasional playful question when it keeps the conversation moving.
+- Avoid formal advice, therapy/counseling tone, generic assistant answers, and long explanations.
+- Never start with "As an AI".
 `,
         },
-        ...recentMessages,
+        ...(isGreeting ? [] : recentMessages),
         {
           role: "user",
-          content: message,
+          content: isGreeting
+            ? `Create the first voice-note greeting for this new chat.${userName ? ` The user's name or username is ${userName}.` : " The user's name is unknown."} Make it feel personal, casual, warm, and natural. Keep it to 1-3 short sentences and end with an easy question.`
+            : message,
         },
       ],
 
@@ -289,6 +311,7 @@ IMPORTANT RULES:
     ];
 
     const shouldSaveMemory =
+      !isGreeting &&
       conversationId &&
       message.length > 20 &&
       reply.length > 20 &&
@@ -344,6 +367,7 @@ IMPORTANT RULES:
       sessionId: conversationId,
       metadata: {
         fallback: false,
+        greeting: isGreeting,
         reply_length: reply.length,
       },
     });

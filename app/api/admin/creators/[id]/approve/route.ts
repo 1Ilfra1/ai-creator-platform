@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
+import { ElevenLabsClient } from "elevenlabs";
 import { requireAdminUser } from "@/lib/admin";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { trackServerEvent } from "@/lib/serverAnalytics";
+
+const PROFESSIONAL_CATEGORY = "professional";
 
 export async function POST(
   request: Request,
@@ -28,6 +31,26 @@ export async function POST(
     if (creatorError || !creator?.voice_id) {
       return NextResponse.json(
         { error: "Save a valid ElevenLabs voice ID before approving creator" },
+        { status: 400 }
+      );
+    }
+
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "ElevenLabs API key is not configured" },
+        { status: 500 }
+      );
+    }
+
+    const elevenlabs = new ElevenLabsClient({ apiKey });
+    const voice = await elevenlabs.voices.get(creator.voice_id);
+    const category = voice.category || voice.sharing?.category || undefined;
+
+    if (category !== PROFESSIONAL_CATEGORY) {
+      return NextResponse.json(
+        { error: "Voice ID must belong to a Professional Voice Clone before approval" },
         { status: 400 }
       );
     }

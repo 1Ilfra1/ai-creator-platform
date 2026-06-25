@@ -8,6 +8,8 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import { supabase } from "@/lib/supabase";
 import { trackEvent } from "@/services/analytics";
 
+type VoiceValidationStatus = "idle" | "validating" | "valid" | "invalid";
+
 export default function DashboardPage() {
     const router = useRouter();
 
@@ -23,13 +25,15 @@ export default function DashboardPage() {
     const [bannerImage, setBannerImage] = useState("");
     const [introAudio, setIntroAudio] = useState("");
     const [instagramHandle, setInstagramHandle] = useState("");
-    const [voiceSamplePath, setVoiceSamplePath] = useState("");
-    const [voiceConsentAt, setVoiceConsentAt] = useState<string | null>(null);
-    const [voiceConsentChecked, setVoiceConsentChecked] = useState(false);
+    const [voiceId, setVoiceId] = useState("");
+    const [voiceValidationStatus, setVoiceValidationStatus] =
+        useState<VoiceValidationStatus>("idle");
+    const [voiceValidationMessage, setVoiceValidationMessage] = useState("");
+    const [voiceName, setVoiceName] = useState("");
+    const [showVoiceGuide, setShowVoiceGuide] = useState(false);
     const [uploadingAudio, setUploadingAudio] = useState(false);
     const [uploadingProfileImage, setUploadingProfileImage] = useState(false);
     const [uploadingBannerImage, setUploadingBannerImage] = useState(false);
-    const [uploadingVoiceSample, setUploadingVoiceSample] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState("");
     const [tagline, setTagline] = useState("");
     const [personalityPrompt, setPersonalityPrompt] = useState("");
@@ -40,12 +44,11 @@ export default function DashboardPage() {
         tagline.trim() &&
         personalityPrompt.trim() &&
         instagramHandle.trim() &&
-        voiceSamplePath &&
-        voiceConsentAt
+        voiceId.trim() &&
+        voiceValidationStatus === "valid"
     );
     const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
     const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
-    const MAX_VOICE_SAMPLE_SIZE = 10 * 1024 * 1024;
 
     const ALLOWED_IMAGE_TYPES = [
         "image/jpeg",
@@ -56,13 +59,19 @@ export default function DashboardPage() {
     const ALLOWED_AUDIO_TYPES = [
         "audio/mpeg",
         "audio/mp3",
-    ];
-
-    const ALLOWED_VOICE_SAMPLE_TYPES = [
-        "audio/mpeg",
-        "audio/wav",
         "audio/mp4",
         "audio/x-m4a",
+        "audio/m4a",
+        "audio/aac",
+        "audio/wav",
+        "audio/x-wav",
+    ];
+
+    const ALLOWED_AUDIO_EXTENSIONS = [
+        ".mp3",
+        ".m4a",
+        ".aac",
+        ".wav",
     ];
 
     useEffect(() => {
@@ -110,9 +119,13 @@ export default function DashboardPage() {
                     setBannerImage(data.banner_image || "");
                     setIntroAudio(data.intro_audio || "");
                     setInstagramHandle(data.instagram_handle || "");
-                    setVoiceSamplePath(data.voice_sample_path || "");
-                    setVoiceConsentAt(data.voice_consent_at || null);
-                    setVoiceConsentChecked(Boolean(data.voice_consent_at));
+                    setVoiceId(data.voice_id || "");
+                    if (data.voice_id) {
+                        setVoiceValidationStatus("idle");
+                        setVoiceValidationMessage(
+                            "Saved Voice ID loaded. Validate it before submitting or updating your creator profile."
+                        );
+                    }
                 }
             } catch (error) {
                 console.error("Failed to load creator:", error);
@@ -137,12 +150,15 @@ export default function DashboardPage() {
             return;
         }
 
-        const isMp3File =
+        const fileNameLower = file.name.toLowerCase();
+        const isSupportedAudioFile =
             ALLOWED_AUDIO_TYPES.includes(file.type) ||
-            file.name.toLowerCase().endsWith(".mp3");
+            ALLOWED_AUDIO_EXTENSIONS.some((extension) =>
+                fileNameLower.endsWith(extension)
+            );
 
-        if (!isMp3File) {
-            alert("Please upload an MP3 file.");
+        if (!isSupportedAudioFile) {
+            alert("Please upload an MP3, M4A, AAC, or WAV audio file.");
             return;
         }
 
@@ -238,81 +254,65 @@ export default function DashboardPage() {
         }
     }
 
-    function getAudioDuration(file: File) {
-        return new Promise<number>((resolve, reject) => {
-            const audio = document.createElement("audio");
-            const objectUrl = URL.createObjectURL(file);
+    async function validateVoiceId() {
+        const nextVoiceId = voiceId.trim();
 
-            audio.preload = "metadata";
-            audio.onloadedmetadata = () => {
-                URL.revokeObjectURL(objectUrl);
-                resolve(audio.duration);
-            };
-            audio.onerror = () => {
-                URL.revokeObjectURL(objectUrl);
-                reject(new Error("Could not read audio duration."));
-            };
-            audio.src = objectUrl;
-        });
-    }
-
-    async function uploadVoiceSample(
-        event: React.ChangeEvent<HTMLInputElement>
-    ) {
-        const file = event.target.files?.[0];
-
-        if (!file || !currentUserId) return;
-
-        if (file.size > MAX_VOICE_SAMPLE_SIZE) {
-            alert("Voice sample file too large.");
+        if (!nextVoiceId) {
+            setVoiceValidationStatus("invalid");
+            setVoiceValidationMessage("Voice ID is required.");
             return;
         }
 
-        const fileNameLower = file.name.toLowerCase();
-        const isAllowedVoiceSample =
-            ALLOWED_VOICE_SAMPLE_TYPES.includes(file.type) ||
-            fileNameLower.endsWith(".mp3") ||
-            fileNameLower.endsWith(".wav") ||
-            fileNameLower.endsWith(".m4a") ||
-            fileNameLower.endsWith(".mp4");
+        const {
+            data: { session },
+        } = await supabase.auth.getSession();
 
-        if (!isAllowedVoiceSample) {
-            alert("Please upload an MP3, WAV, M4A, or MP4 audio file.");
+        if (!session?.access_token) {
+            setVoiceValidationStatus("invalid");
+            setVoiceValidationMessage("Please log in again before validating your Voice ID.");
             return;
         }
 
         try {
-            setUploadingVoiceSample(true);
+            setVoiceValidationStatus("validating");
+            setVoiceValidationMessage("Checking Voice ID...");
 
-            const duration = await getAudioDuration(file);
+            const response = await fetch("/api/elevenlabs/validate-voice", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({
+                    voiceId: nextVoiceId,
+                }),
+            });
 
-            if (duration < 20 || duration > 30) {
-                alert("Please upload a voice sample between 20 and 30 seconds.");
+            const data = await response.json();
+
+            if (response.ok && data.valid) {
+                setVoiceValidationStatus("valid");
+                setVoiceValidationMessage(
+                    data.message ||
+                    "Professional Voice Clone verified."
+                );
+                setVoiceName(data.voiceName || "");
                 return;
             }
 
-            const fileExt = file.name.split(".").pop();
-            const fileName =
-                `${currentUserId}/${creatorId || currentUserId}-${Date.now()}.${fileExt}`;
-
-            const { error } = await supabase.storage
-                .from("creator-voice-samples")
-                .upload(fileName, file, {
-                    upsert: false,
-                });
-
-            if (error) {
-                console.error(error);
-                alert("Failed to upload voice sample.");
-                return;
-            }
-
-            setVoiceSamplePath(fileName);
+            setVoiceValidationStatus("invalid");
+            setVoiceValidationMessage(
+                data.message ||
+                "This Voice ID could not be verified. Make sure it belongs to a Professional Voice Clone accessible from ElevenLabs."
+            );
+            setVoiceName("");
         } catch (error) {
-            console.error(error);
-            alert("Voice sample upload failed.");
-        } finally {
-            setUploadingVoiceSample(false);
+            console.error("Voice ID validation failed:", error);
+            setVoiceValidationStatus("invalid");
+            setVoiceValidationMessage(
+                "This Voice ID could not be verified. Make sure it belongs to a Professional Voice Clone accessible from ElevenLabs."
+            );
+            setVoiceName("");
         }
     }
 
@@ -321,7 +321,7 @@ export default function DashboardPage() {
         if (!currentUserId) return;
 
         if (!profileComplete) {
-            alert("Complete all required creator profile fields, upload your 20-30 second voice sample, and confirm voice consent first.");
+            alert("Complete all required creator profile fields and validate your Professional Voice Clone ID first.");
             return;
         }
 
@@ -334,8 +334,7 @@ export default function DashboardPage() {
             banner_image: bannerImage,
             intro_audio: introAudio,
             instagram_handle: instagramHandle.trim(),
-            voice_sample_path: voiceSamplePath,
-            voice_consent_at: voiceConsentAt,
+            voice_id: voiceId.trim(),
         };
 
         const shouldSubmitForApproval = !isActive;
@@ -388,6 +387,7 @@ export default function DashboardPage() {
                     has_profile_image: Boolean(profileImage),
                     has_banner_image: Boolean(bannerImage),
                     has_intro_audio: Boolean(introAudio),
+                    has_voice_id: Boolean(voiceId.trim()),
                 },
             });
 
@@ -655,18 +655,18 @@ export default function DashboardPage() {
 
                     <div>
                         <label className="block text-sm mb-2">
-                            Intro voice message (MP3)
+                            Intro voice message (MP3, M4A, AAC, WAV)
                         </label>
 
                         <p className="text-xs text-zinc-500 mb-3">
-                            This is the first voice message fans hear when opening your chat.
+                            This optional preview is what fans can play on your public profile and creator cards.
                             Keep it warm, short, and welcoming.
                         </p>
 
                         <input
                             id="intro-audio-upload"
                             type="file"
-                            accept="audio/mpeg,.mp3"
+                            accept="audio/mpeg,audio/mp3,audio/mp4,audio/x-m4a,audio/m4a,audio/aac,audio/wav,audio/x-wav,.mp3,.m4a,.aac,.wav"
                             onChange={uploadIntroAudio}
                             className="sr-only"
                         />
@@ -691,64 +691,122 @@ export default function DashboardPage() {
                     </div>
 
                     <div className="border border-zinc-800 rounded-3xl p-5 bg-zinc-900/60">
-                        <h3 className="text-lg font-semibold mb-2">
-                            AI voice onboarding
-                        </h3>
+                        <div className="flex items-start justify-between gap-4 mb-3">
+                            <div>
+                                <h3 className="text-lg font-semibold">
+                                    Professional Voice Clone ID
+                                </h3>
+                                <p className="text-sm text-zinc-400 mt-1">
+                                    Paste your ElevenLabs Professional Voice Clone ID and validate it before submitting.
+                                </p>
+                            </div>
 
-                        <p className="text-sm text-zinc-400 mb-4">
-                            Upload a clear voice sample between 20 and 30 seconds. Use a quiet room, no music, no background noise.
-                        </p>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => setShowVoiceGuide(true)}
+                            className="mb-3 text-left text-sm font-semibold text-zinc-300 underline decoration-zinc-700 underline-offset-4 hover:text-white"
+                        >
+                            How do I get a Professional Voice ID?
+                        </button>
 
                         <input
-                            id="voice-sample-upload"
-                            type="file"
-                            accept="audio/mpeg,audio/wav,audio/mp4,audio/x-m4a,.mp3,.wav,.m4a,.mp4"
-                            onChange={uploadVoiceSample}
-                            className="sr-only"
+                            value={voiceId}
+                            onChange={(event) => {
+                                setVoiceId(event.target.value);
+                                setVoiceValidationStatus("idle");
+                                setVoiceValidationMessage("");
+                                setVoiceName("");
+                            }}
+                            className="w-full bg-black border border-zinc-800 rounded-2xl px-4 py-3 outline-none"
+                            placeholder="Paste ElevenLabs Voice ID"
                         />
-                        <label
-                            htmlFor="voice-sample-upload"
-                            className="inline-flex bg-black border border-zinc-800 rounded-2xl px-4 py-3 font-semibold cursor-pointer"
+
+                        <button
+                            type="button"
+                            onClick={validateVoiceId}
+                            disabled={voiceValidationStatus === "validating"}
+                            className="mt-3 rounded-2xl bg-white text-black px-4 py-3 text-sm font-bold disabled:opacity-50"
                         >
-                            Choose voice sample
-                        </label>
+                            {voiceValidationStatus === "validating"
+                                ? "Validating..."
+                                : "Validate Voice ID"}
+                        </button>
 
-                        {uploadingVoiceSample && (
-                            <p className="text-sm text-zinc-500 mt-2">
-                                Uploading voice sample...
+                        {voiceValidationMessage && (
+                            <p
+                                className={`text-sm mt-3 ${voiceValidationStatus === "valid"
+                                    ? "text-green-400"
+                                    : voiceValidationStatus === "invalid"
+                                        ? "text-red-300"
+                                        : "text-zinc-500"
+                                    }`}
+                            >
+                                {voiceValidationMessage}
+                                {voiceName ? ` (${voiceName})` : ""}
                             </p>
                         )}
 
-                        {voiceSamplePath && (
-                            <p className="text-sm text-green-400 mt-2">
-                                Voice sample uploaded
-                            </p>
-                        )}
-
-                        <label className="flex items-start gap-3 mt-5 text-sm text-zinc-300">
-                            <input
-                                type="checkbox"
-                                checked={voiceConsentChecked}
-                                onChange={(event) => {
-                                    const checked = event.target.checked;
-                                    setVoiceConsentChecked(checked);
-                                    setVoiceConsentAt(
-                                        checked ? new Date().toISOString() : null
-                                    );
-                                }}
-                                className="mt-1"
-                            />
-                            <span>
-                                I confirm this is my own voice and I allow this platform to create and use an AI voice clone for my creator profile.
-                            </span>
-                        </label>
-
-                        <div className="space-y-2 text-xs text-zinc-500 mt-5">
-                            <p>Admin will manually create and review your AI voice clone.</p>
-                            <p>Fans will not access your uploaded voice sample.</p>
-                            <p>Intro voice message is separate from generated AI replies.</p>
-                        </div>
+                        <p className="text-xs text-zinc-500 mt-4">
+                            Intro voice message is separate from generated AI replies.
+                        </p>
                     </div>
+
+                    {showVoiceGuide && (
+                        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur flex items-center justify-center p-6">
+                            <div className="max-w-md w-full rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
+                                <div className="flex items-start justify-between gap-4 mb-4">
+                                    <h3 className="text-xl font-bold">
+                                        How to get your Professional Voice ID
+                                    </h3>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowVoiceGuide(false)}
+                                        className="text-zinc-500 hover:text-white"
+                                        aria-label="Close guide"
+                                    >
+                                        X
+                                    </button>
+                                </div>
+
+                                <p className="text-sm text-zinc-400 mb-4">
+                                    To publish on Creator Voice, you need a verified Professional Voice Clone from ElevenLabs.
+                                </p>
+
+                                <ol className="list-decimal space-y-2 pl-5 text-sm text-zinc-300">
+                                    <li>Create an ElevenLabs account.</li>
+                                    <li>Upgrade to a plan that supports Professional Voice Clone.</li>
+                                    <li>Create a Professional Voice Clone.</li>
+                                    <li>Upload 30-120 minutes of clean speech. Use a quiet room, no music, no heavy echo.</li>
+                                    <li>Complete ElevenLabs identity verification.</li>
+                                    <li>Open your voice settings in ElevenLabs and copy the Voice ID.</li>
+                                    <li>Paste the Voice ID here and click Validate.</li>
+                                </ol>
+
+                                <div className="mt-5 grid gap-3">
+                                    <a
+                                        href="https://elevenlabs.io/"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="rounded-2xl bg-white text-black px-4 py-3 text-center text-sm font-bold"
+                                    >
+                                        Open ElevenLabs
+                                    </a>
+
+                                    <a
+                                        href="https://elevenlabs.io/docs/eleven-creative/voices/voice-cloning/professional-voice-cloning"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="rounded-2xl border border-zinc-800 px-4 py-3 text-center text-sm font-semibold text-zinc-300"
+                                    >
+                                        ElevenLabs Professional Voice Clone guide
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     <button
                         onClick={saveProfile}
@@ -781,8 +839,7 @@ export default function DashboardPage() {
                                 <p>{tagline.trim() ? "✅" : "⬜"} Creator description</p>
                                 <p>{personalityPrompt.trim() ? "✅" : "⬜"} Personality setup</p>
                                 <p>{instagramHandle.trim() ? "✅" : "⬜"} Instagram handle</p>
-                                <p>{voiceSamplePath ? "✅" : "⬜"} 20-30 second voice sample</p>
-                                <p>{voiceConsentAt ? "✅" : "⬜"} Voice consent</p>
+                                <p>{voiceValidationStatus === "valid" ? "✅" : "⬜"} Professional Voice Clone ID</p>
 
                                 <p className="text-xs uppercase tracking-wide text-zinc-500 pt-3">
                                     Optional

@@ -4,6 +4,7 @@ import { ElevenLabsClient } from "elevenlabs";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const VOICE_ID_PATTERN = /^[A-Za-z0-9_-]{10,64}$/;
+const PROFESSIONAL_CATEGORY = "professional";
 
 export async function POST(request: Request) {
   try {
@@ -35,14 +36,14 @@ export async function POST(request: Request) {
     if (!voiceId) {
       return NextResponse.json({
         valid: false,
-        error: "Voice ID is required",
+        message: "Voice ID is required",
       });
     }
 
     if (!VOICE_ID_PATTERN.test(voiceId)) {
       return NextResponse.json({
         valid: false,
-        error: "Invalid Voice ID format",
+        message: "Invalid Voice ID format",
       });
     }
 
@@ -57,17 +58,35 @@ export async function POST(request: Request) {
 
     const elevenlabs = new ElevenLabsClient({ apiKey });
 
-    await elevenlabs.voices.get(voiceId);
+    const voice = await elevenlabs.voices.get(voiceId);
+    const category = voice.category || voice.sharing?.category || undefined;
+    const isProfessionalClone = category === PROFESSIONAL_CATEGORY;
+
+    if (!isProfessionalClone) {
+      return NextResponse.json({
+        valid: false,
+        isProfessionalClone: false,
+        voiceName: voice.name,
+        category,
+        message:
+          "This Voice ID could not be verified as a Professional Voice Clone.",
+      });
+    }
 
     return NextResponse.json({
       valid: true,
+      isProfessionalClone: true,
+      voiceName: voice.name,
+      category,
+      message: "Professional Voice Clone verified.",
     });
   } catch (error) {
     console.error("Voice ID validation failed:", error);
 
     return NextResponse.json({
       valid: false,
-      error: "Voice ID not found or unavailable",
+      message:
+        "This Voice ID could not be verified. Make sure it belongs to a Professional Voice Clone accessible from ElevenLabs.",
     });
   }
 }

@@ -16,6 +16,9 @@ export default function CreatorEarningsPage() {
   const [conversationCount, setConversationCount] = useState(0);
   const [messageCount, setMessageCount] = useState(0);
   const [voiceGenerations, setVoiceGenerations] = useState(0);
+  const [voiceSeconds, setVoiceSeconds] = useState(0);
+  const [profileViews, setProfileViews] = useState(0);
+  const [chatStarts, setChatStarts] = useState(0);
 
   useEffect(() => {
     async function loadAnalytics() {
@@ -29,49 +32,33 @@ export default function CreatorEarningsPage() {
           return;
         }
 
-        const { data: creator } = await supabase
-          .from("creators")
-          .select("id, username, display_name, tagline, personality_prompt, voice_id")
-          .eq("user_id", user.id)
-          .maybeSingle();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
 
-        if (
-          !creator?.username ||
-          !creator.display_name ||
-          !creator.tagline ||
-          !creator.personality_prompt ||
-          !creator.voice_id
-        ) {
+        const response = await fetch("/api/creator-analytics", {
+          headers: {
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+        });
+
+        if (response.status === 403) {
           router.replace("/profile");
           return;
         }
 
-        const { data: conversations } = await supabase
-          .from("conversations")
-          .select("id")
-          .eq("creator_id", creator.id);
-
-        const conversationIds =
-          conversations?.map((c) => c.id) || [];
-
-        setConversationCount(conversationIds.length);
-
-        if (conversationIds.length > 0) {
-          const { data: messages } = await supabase
-            .from("messages")
-            .select("voice_generated")
-            .in("conversation_id", conversationIds);
-
-          setMessageCount(messages?.length || 0);
-
-          const generatedVoices =
-            messages?.filter(
-              (m) => m.voice_generated
-            ).length || 0;
-
-          setVoiceGenerations(generatedVoices);
+        if (!response.ok) {
+          throw new Error("Creator analytics request failed");
         }
 
+        const analytics = await response.json();
+
+        setConversationCount(analytics.conversationCount || 0);
+        setMessageCount(analytics.messageCount || 0);
+        setVoiceGenerations(analytics.voiceGenerations || 0);
+        setVoiceSeconds(analytics.voiceSeconds || 0);
+        setProfileViews(analytics.profileViews || 0);
+        setChatStarts(analytics.chatStarts || 0);
       } catch (error) {
         console.error("Failed to load creator earnings:", error);
       } finally {
@@ -84,6 +71,8 @@ export default function CreatorEarningsPage() {
 
   const estimatedEarnings =
     (voiceGenerations * 0.02).toFixed(2);
+  const voiceMinutes = Math.floor(voiceSeconds / 60);
+  const remainingVoiceSeconds = voiceSeconds % 60;
 
   return (
     <ProtectedRoute>
@@ -126,6 +115,30 @@ export default function CreatorEarningsPage() {
 
                 <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
                   <p className="text-sm text-zinc-500 mb-2">
+                    Profile views
+                  </p>
+
+                  <p className="text-3xl font-bold">
+                    {profileViews}
+                  </p>
+                </div>
+
+                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
+                  <p className="text-sm text-zinc-500 mb-2">
+                    Chat starts
+                  </p>
+
+                  <p className="text-3xl font-bold">
+                    {chatStarts}
+                  </p>
+                </div>
+
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+
+                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
+                  <p className="text-sm text-zinc-500 mb-2">
                     Conversations
                   </p>
 
@@ -153,6 +166,16 @@ export default function CreatorEarningsPage() {
 
                 <p className="text-3xl font-bold">
                   {voiceGenerations}
+                </p>
+              </div>
+
+              <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
+                <p className="text-sm text-zinc-500 mb-2">
+                  Voice minutes used
+                </p>
+
+                <p className="text-3xl font-bold">
+                  {voiceMinutes}m {remainingVoiceSeconds}s
                 </p>
               </div>
 

@@ -39,6 +39,7 @@ export default function CreatorProfilePage({
     const [showFullBio, setShowFullBio] = useState(false);
     const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
     const [showBackButton, setShowBackButton] = useState(false);
+    const [introPreviewStarted, setIntroPreviewStarted] = useState(false);
 
     useEffect(() => {
 
@@ -116,7 +117,7 @@ export default function CreatorProfilePage({
     return (
         <main className="min-h-screen bg-black text-white pb-24">
 
-            <div className="relative h-64 bg-gradient-to-br from-purple-900/70 via-zinc-900 to-black">
+            <div className="relative h-52 sm:h-60 bg-gradient-to-br from-purple-900/70 via-zinc-900 to-black">
                 {showBackButton && (
                     <button
                         onClick={() => router.back()}
@@ -204,7 +205,11 @@ export default function CreatorProfilePage({
                     </div>
 
                     {creator.intro_audio ? (
-                        <AudioPlayer audioUrl={creator.intro_audio} />
+                        <AudioPlayer
+                            audioUrl={creator.intro_audio}
+                            onPlay={() => setIntroPreviewStarted(true)}
+                            onEnded={() => setIntroPreviewStarted(true)}
+                        />
                     ) : (
                         <p className="text-sm text-zinc-500">
                             No intro yet
@@ -225,9 +230,13 @@ export default function CreatorProfilePage({
                         });
                         router.push(`/chat/${creator.username}`);
                     }}
-                    className="w-full bg-white text-black py-4 rounded-3xl font-bold text-lg shadow-2xl active:scale-[0.99] transition"
+                    className={`creator-start-glow w-full py-4 rounded-3xl font-bold text-lg shadow-2xl active:scale-[0.99] transition ${
+                        introPreviewStarted
+                            ? "creator-start-glow-strong bg-green-500 text-black"
+                            : "bg-white text-black"
+                    }`}
                 >
-                    Talk to me 💜
+                    {introPreviewStarted ? "Start chat now" : "Start chat"}
                 </button>
 
                 <button
