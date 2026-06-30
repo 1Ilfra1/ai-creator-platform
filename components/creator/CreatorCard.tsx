@@ -5,6 +5,8 @@ import { trackEvent } from "@/services/analytics";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+let activePreviewAudio: HTMLAudioElement | null = null;
+
 export default function CreatorCard({
   creator,
 }: {
@@ -17,9 +19,21 @@ export default function CreatorCard({
   async function handlePreview() {
     if (!creator.intro_audio) return;
 
+    if (activePreviewAudio) {
+      activePreviewAudio.pause();
+      activePreviewAudio.currentTime = 0;
+    }
+
     const audio = new Audio(creator.intro_audio);
+    activePreviewAudio = audio;
+
     audio.onplay = () => setPreviewStarted(true);
-    audio.onended = () => setPreviewStarted(true);
+    audio.onended = () => {
+      if (activePreviewAudio === audio) {
+        activePreviewAudio = null;
+      }
+      setPreviewStarted(true);
+    };
 
     try {
       await audio.play();
@@ -36,6 +50,9 @@ export default function CreatorCard({
       }
       setPreviewStarted(true);
     } catch (error) {
+      if (activePreviewAudio === audio) {
+        activePreviewAudio = null;
+      }
       console.error("Failed to play creator intro:", error);
     }
   }
