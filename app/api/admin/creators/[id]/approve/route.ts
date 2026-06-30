@@ -24,7 +24,7 @@ export async function POST(
 
     const { data: creator, error: creatorError } = await supabaseAdmin
       .from("creators")
-      .select("voice_id")
+      .select("voice_id, is_demo")
       .eq("id", id)
       .single();
 
@@ -48,7 +48,7 @@ export async function POST(
     const voice = await elevenlabs.voices.get(creator.voice_id);
     const category = voice.category || voice.sharing?.category || undefined;
 
-    if (category !== PROFESSIONAL_CATEGORY) {
+    if (!creator.is_demo && category !== PROFESSIONAL_CATEGORY) {
       return NextResponse.json(
         { error: "Voice ID must belong to a Professional Voice Clone before approval" },
         { status: 400 }

@@ -44,7 +44,6 @@ export default function DashboardPage() {
         displayName.trim() &&
         tagline.trim() &&
         personalityPrompt.trim() &&
-        instagramHandle.trim() &&
         voiceId.trim() &&
         voiceValidationStatus === "valid"
     );
@@ -343,59 +342,51 @@ export default function DashboardPage() {
             return;
         }
 
-        const creatorFields = {
-            username: username.trim(),
-            display_name: displayName.trim(),
-            tagline: tagline.trim(),
-            personality_prompt: personalityPrompt.trim(),
-            profile_image: profileImage,
-            banner_image: bannerImage,
-            intro_audio: introAudio,
-            instagram_handle: instagramHandle.trim(),
-            voice_id: voiceId.trim(),
-        };
+        const {
+            data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session?.access_token) {
+            alert("Please log in again before saving your creator profile.");
+            return;
+        }
 
         const shouldSubmitForApproval = !isActive;
-        const creatorPayload = shouldSubmitForApproval
-            ? {
-                ...creatorFields,
-                is_published: true,
-            }
-            : creatorFields;
+        const response = await fetch("/api/creator-profile", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({
+                displayName,
+                tagline,
+                personalityPrompt,
+                profileImage,
+                bannerImage,
+                introAudio,
+                instagramHandle,
+                voiceId,
+            }),
+        });
 
-        const { data, error } = creatorId
-            ? await supabase
-                .from("creators")
-                .update(creatorPayload)
-                .eq("id", creatorId)
-                .select("id")
-                .single()
-            : await supabase
-                .from("creators")
-                .insert({
-                    ...creatorPayload,
-                    user_id: currentUserId,
-                })
-                .select("id")
-                .single();
+        const data = await response.json();
 
-        if (error) {
-            if (error.code === "23505") {
+        if (!response.ok) {
+            if (data.code === "23505" || response.status === 409) {
                 alert("Your creator profile could not be updated because this username is already in use. Change it in Profile settings first.");
                 return;
             }
 
-            console.error(error);
-            alert("Failed to save creator profile.");
+            console.error(data);
+            alert(data.error || "Failed to save creator profile.");
             return;
         }
 
         if (data) {
             setCreatorId(data.id);
-            if (shouldSubmitForApproval) {
-                setIsPublished(true);
-                setIsActive(false);
-            }
+            setIsPublished(Boolean(data.isPublished));
+            setIsActive(Boolean(data.isActive));
             trackEvent({
                 eventType: "creator_profile_saved",
                 entityType: "creator",
@@ -866,7 +857,6 @@ export default function DashboardPage() {
                                 <p>{displayName.trim() ? "✅" : "⬜"} Display name</p>
                                 <p>{tagline.trim() ? "✅" : "⬜"} Creator description</p>
                                 <p>{personalityPrompt.trim() ? "✅" : "⬜"} Personality setup</p>
-                                <p>{instagramHandle.trim() ? "✅" : "⬜"} Instagram handle</p>
                                 <p>{voiceValidationStatus === "valid" ? "✅" : "⬜"} Professional Voice Clone ID</p>
 
                                 <p className="text-xs uppercase tracking-wide text-zinc-500 pt-3">
@@ -875,6 +865,7 @@ export default function DashboardPage() {
                                 <p>{profileImage ? "✅" : "⬜"} Profile image</p>
                                 <p>{bannerImage ? "✅" : "⬜"} Banner image</p>
                                 <p>{introAudio ? "✅" : "⬜"} Intro voice message</p>
+                                <p>{instagramHandle.trim() ? "✅" : "⬜"} Instagram handle</p>
                             </div>
                         </div>
                     )}

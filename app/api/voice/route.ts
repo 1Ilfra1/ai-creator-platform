@@ -293,12 +293,34 @@ export async function POST(request: Request) {
       profile.voice_seconds_remaining - estimatedSeconds
     );
 
-    await supabaseAdmin
+    const { error: deductionError } = await supabaseAdmin
       .from("profiles")
       .update({
         voice_seconds_remaining: remainingAfterGeneration,
       })
       .eq("id", user.id);
+
+    if (deductionError) {
+      console.error("Voice balance deduction failed:", deductionError);
+
+      await supabaseAdmin.storage
+        .from("voice-messages")
+        .remove([fileName]);
+
+      await supabaseAdmin
+        .from("voice_generation_locks")
+        .delete()
+        .eq("user_id", user.id);
+
+      lockedUserId = null;
+
+      await trackVoiceFailed("deduction_failed");
+
+      return NextResponse.json(
+        { error: "Voice generation could not be charged" },
+        { status: 500 }
+      );
+    }
 
     const { data } = supabaseAdmin.storage
       .from("voice-messages")

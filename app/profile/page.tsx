@@ -59,7 +59,6 @@ export default function ProfilePage() {
           creator.display_name &&
           creator.tagline &&
           creator.personality_prompt &&
-          creator.instagram_handle &&
           creator.voice_id
         );
 
@@ -154,7 +153,6 @@ export default function ProfilePage() {
       creator.display_name &&
       creator.tagline &&
       creator.personality_prompt &&
-      creator.instagram_handle &&
       creator.voice_id
     );
 

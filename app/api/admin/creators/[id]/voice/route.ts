@@ -24,6 +24,19 @@ export async function POST(
     const body = await request.json();
     const voiceId = String(body.voiceId || "").trim();
 
+    const { data: creator, error: creatorError } = await supabaseAdmin
+      .from("creators")
+      .select("is_demo")
+      .eq("id", id)
+      .single();
+
+    if (creatorError || !creator) {
+      return NextResponse.json(
+        { error: "Creator not found" },
+        { status: 404 }
+      );
+    }
+
     if (!VOICE_ID_PATTERN.test(voiceId)) {
       return NextResponse.json(
         { error: "Invalid Voice ID format" },
@@ -45,7 +58,7 @@ export async function POST(
     const voice = await elevenlabs.voices.get(voiceId);
     const category = voice.category || voice.sharing?.category || undefined;
 
-    if (category !== PROFESSIONAL_CATEGORY) {
+    if (!creator.is_demo && category !== PROFESSIONAL_CATEGORY) {
       return NextResponse.json(
         { error: "Voice ID must belong to a Professional Voice Clone" },
         { status: 400 }
