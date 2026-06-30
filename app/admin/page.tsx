@@ -19,6 +19,7 @@ interface CreatorReview {
   voice_sample_path: string | null;
   voice_sample_url: string | null;
   voice_id: string | null;
+  is_demo: boolean | null;
   is_published: boolean | null;
   is_active: boolean | null;
   created_at: string | null;
@@ -154,8 +155,9 @@ export default function AdminPage() {
     }
   }
 
-  async function validateCreatorVoiceId(creatorId: string) {
+  async function validateCreatorVoiceId(creator: CreatorReview) {
     const token = await getAccessToken();
+    const creatorId = creator.id;
     const voiceId = voiceInputs[creatorId]?.trim();
 
     if (!token || !voiceId) return;
@@ -166,7 +168,7 @@ export default function AdminPage() {
         [creatorId]: "Checking voice ID...",
       }));
 
-      const response = await fetch("/api/elevenlabs/validate-voice", {
+      const response = await fetch(`/api/admin/creators/${creatorId}/validate-voice`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -183,7 +185,7 @@ export default function AdminPage() {
         ...prev,
         [creatorId]:
           response.ok && data.valid
-            ? data.message || "Professional Voice Clone verified."
+            ? data.message || (creator.is_demo ? "Voice ID verified for demo creator." : "Professional Voice Clone verified.")
             : data.message || data.error || "Voice ID not found or unavailable",
       }));
     } catch (error) {
@@ -383,7 +385,7 @@ function CreatorReviewSection({
   voiceInputs: Record<string, string>;
   voiceStatuses: Record<string, string>;
   onVoiceInputChange: (creatorId: string, value: string) => void;
-  onValidateVoiceId: (creatorId: string) => void;
+  onValidateVoiceId: (creator: CreatorReview) => void;
   onSaveVoiceId: (creatorId: string) => void;
   actions: (creator: CreatorReview) => ReactNode;
 }) {
@@ -424,9 +426,17 @@ function CreatorReviewSection({
                 </div>
 
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-lg font-bold">
-                    {creator.display_name || "Untitled creator"}
-                  </h3>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-lg font-bold">
+                      {creator.display_name || "Untitled creator"}
+                    </h3>
+
+                    {creator.is_demo && (
+                      <span className="rounded-full border border-green-800 bg-green-950/50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-green-300">
+                        Demo
+                      </span>
+                    )}
+                  </div>
 
                   <p className="text-sm text-zinc-500">
                     @{creator.username || "username"}
@@ -485,7 +495,7 @@ function CreatorReviewSection({
                     <div className="grid grid-cols-2 gap-2 mt-3">
                       <button
                         type="button"
-                        onClick={() => onValidateVoiceId(creator.id)}
+                        onClick={() => onValidateVoiceId(creator)}
                         className="rounded-xl bg-zinc-800 border border-zinc-700 py-2 text-sm font-semibold"
                       >
                         Validate Voice ID

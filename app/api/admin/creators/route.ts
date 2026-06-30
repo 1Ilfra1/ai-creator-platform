@@ -3,7 +3,7 @@ import { requireAdminUser } from "@/lib/admin";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const CREATOR_REVIEW_FIELDS =
-  "id, username, display_name, tagline, bio, profile_image, banner_image, intro_audio, instagram_handle, voice_sample_path, voice_id, is_published, is_active, created_at";
+  "id, username, display_name, tagline, bio, profile_image, banner_image, intro_audio, instagram_handle, voice_sample_path, voice_id, is_demo, is_published, is_active, created_at";
 
 async function attachVoiceSampleUrls(creators: any[] = []) {
   return Promise.all(

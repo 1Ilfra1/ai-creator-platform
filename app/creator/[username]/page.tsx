@@ -21,6 +21,7 @@ interface Creator {
     profile_image: string | null;
     banner_image: string | null;
     intro_audio: string | null;
+    is_demo: boolean | null;
 }
 
 export default function CreatorProfilePage({
@@ -47,7 +48,7 @@ export default function CreatorProfilePage({
 
             const { data } = await supabase
                 .from("public_creators")
-                .select("id, username, display_name, tagline, bio, tags, topics, profile_image, banner_image, intro_audio, is_active, is_published")
+                .select("id, username, display_name, tagline, bio, tags, topics, profile_image, banner_image, intro_audio, is_demo, is_active, is_published")
                 .eq("username", username)
                 .eq("is_active", true)
                 .eq("is_published", true)

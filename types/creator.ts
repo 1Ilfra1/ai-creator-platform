@@ -25,6 +25,7 @@ export interface PublicCreator {
   intro_audio: string | null;
   tags: string[] | null;
   topics: string[] | null;
+  is_demo: boolean | null;
   is_active: boolean;
   is_published: boolean;
 }

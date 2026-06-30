@@ -69,7 +69,7 @@ export default function CreatorEarningsPage() {
     loadAnalytics();
   }, []);
 
-  const estimatedEarnings =
+  const estimatedActivityValue =
     (voiceGenerations * 0.02).toFixed(2);
   const voiceMinutes = Math.floor(voiceSeconds / 60);
   const remainingVoiceSeconds = voiceSeconds % 60;
@@ -91,7 +91,7 @@ export default function CreatorEarningsPage() {
           </h1>
 
           <p className="text-zinc-500 mb-8">
-            Track your creator growth and estimated earnings.
+            Track your creator growth and early activity signals.
           </p>
 
           {loading ? (
@@ -103,11 +103,11 @@ export default function CreatorEarningsPage() {
 
               <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5">
                 <p className="text-sm text-zinc-500 mb-2">
-                  Estimated earnings
+                  Activity value
                 </p>
 
                 <p className="text-4xl font-bold">
-                  ${estimatedEarnings}
+                  ${estimatedActivityValue}
                 </p>
               </div>
 
@@ -181,9 +181,8 @@ export default function CreatorEarningsPage() {
 
               <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5">
                 <p className="text-sm text-zinc-400 leading-relaxed">
-                  Creator payouts are currently handled manually.
-                  Automated payouts and creator revenue sharing
-                  are coming in a future update.
+                  This is an internal MVP activity estimate, not a payout balance.
+                  Creator payout rules will be defined before creator monetization launches.
                 </p>
               </div>
 
