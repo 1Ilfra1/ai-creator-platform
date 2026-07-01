@@ -160,6 +160,19 @@ html[data-theme="light"] .bg-red-600.text-white {
   color: #ffffff !important;
 }
 
+html[data-theme="light"] .chat-message-user {
+  background-color: var(--primary-bg) !important;
+  color: var(--primary-text) !important;
+}
+
+html[data-theme="light"] .chat-message-user-text {
+  color: var(--primary-text) !important;
+}
+
+html[data-theme="light"] .chat-message-user-time {
+  color: color-mix(in srgb, var(--primary-text) 58%, transparent) !important;
+}
+
 html[data-theme="light"] input,
 html[data-theme="light"] textarea {
   color: var(--foreground);

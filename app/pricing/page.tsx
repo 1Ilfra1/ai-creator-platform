@@ -143,6 +143,38 @@ export default function PricingPage() {
     }
   }
 
+  async function openBillingPortal() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push("/login");
+      return;
+    }
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    const response = await fetch("/api/stripe/portal", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session?.access_token}`,
+      },
+    });
+
+    const data = await response.json();
+
+    if (data.url) {
+      window.location.href = data.url;
+      return;
+    }
+
+    alert(data.error || "Could not open billing portal.");
+  }
+
   const pricingContext =
     subscriptionStatus === "active"
       ? "Add extra minutes if your monthly plan is active, or manage your plan from Profile."
@@ -256,33 +288,49 @@ export default function PricingPage() {
         </div>
 
         {canBuyTopups && (
-          <div
-            ref={topupRef}
-            className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5 mb-4 scroll-mt-6"
-          >
-            <h3 className="font-semibold mb-4">
-              Need more voice minutes?
-            </h3>
+          <div ref={topupRef} className="space-y-4 mb-4 scroll-mt-6">
+            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5">
+              <h3 className="font-semibold mb-4">
+                Need more voice minutes?
+              </h3>
 
-            <div className="space-y-3">
-              <button
-                onClick={() => buyTopup("30")}
-                className={topupButtonClass}
-              >
-                <div className="flex items-center justify-between">
-                  <span>+30 minutes</span>
-                  <span>$11.99</span>
-                </div>
-              </button>
+              <div className="space-y-3">
+                <button
+                  onClick={() => buyTopup("30")}
+                  className={topupButtonClass}
+                >
+                  <div className="flex items-center justify-between">
+                    <span>+30 minutes</span>
+                    <span>$11.99</span>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => buyTopup("60")}
+                  className={topupButtonClass}
+                >
+                  <div className="flex items-center justify-between">
+                    <span>+60 minutes</span>
+                    <span>$21.99</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-5">
+              <h3 className="font-semibold mb-2">
+                Manage subscription
+              </h3>
+
+              <p className="text-sm text-zinc-500 mb-4">
+                Open Stripe to update your plan, payment method, or cancel your subscription.
+              </p>
 
               <button
-                onClick={() => buyTopup("60")}
-                className={topupButtonClass}
+                onClick={openBillingPortal}
+                className="w-full bg-zinc-800 border border-zinc-700 text-white py-3 rounded-2xl font-semibold hover:border-zinc-500 transition"
               >
-                <div className="flex items-center justify-between">
-                  <span>+60 minutes</span>
-                  <span>$21.99</span>
-                </div>
+                Manage or cancel subscription
               </button>
             </div>
           </div>

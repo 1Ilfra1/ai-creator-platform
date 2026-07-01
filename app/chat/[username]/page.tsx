@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 
 import { supabase } from "@/lib/supabase";
 import { trackEvent } from "@/services/analytics";
-import { buildCreatorSafetyPrompt } from "@/services/prompts";
 import AudioPlayer from "@/components/audio/AudioPlayer";
 import { motion } from "framer-motion";
 
@@ -456,238 +455,126 @@ export default function ChatPage({
         setIsTyping(true);
 
         const text = messageText;
+        const recentMessages = messages
+            .slice(-8)
+            .map((message) => ({
+                role: message.sender_type === "user" ? "user" : "assistant",
+                content: message.text,
+            }));
+        const optimisticMessage: Message = {
+            id: `temp-${Date.now()}`,
+            conversation_id: conversationId,
+            sender_type: "user",
+            text,
+            created_at: new Date().toISOString(),
+            is_fallback: false,
+        } as Message;
+
+        setInput("");
+        setMessages((prev) => [...prev, optimisticMessage]);
 
         try {
             const {
-                data: { session: moderationSession },
+                data: { session },
             } = await supabase.auth.getSession();
 
-            const moderationResponse = await fetch("/api/moderate", {
+            const response = await fetch("/api/chat/respond", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${moderationSession?.access_token}`,
+                    Authorization: `Bearer ${session?.access_token}`,
                 },
-                body: JSON.stringify({ text }),
+                body: JSON.stringify({
+                    message: text,
+                    conversationId,
+                    recentMessages,
+                    source: prefilledText ? "suggested_reply" : "typed",
+                }),
             });
 
-            const moderationData = await moderationResponse.json();
+            const data = await response.json();
 
-            if (!moderationData.allowed) {
-                alert(moderationData.reason);
-                sendingRef.current = false;
-                setIsTyping(false);
+            if (!response.ok) {
+                setMessages((prev) => {
+                    if (data.userMessage) {
+                        return prev.map((message) =>
+                            message.id === optimisticMessage.id
+                                ? data.userMessage
+                                : message
+                        );
+                    }
+
+                    return prev.filter(
+                        (message) => message.id !== optimisticMessage.id
+                    );
+                });
+
+                if (!data.userMessage) {
+                    setInput(text);
+                }
+
+                if (response.status === 401) {
+                    setVoiceNotice("Please log in again.");
+                } else if (response.status === 402) {
+                    openPaywall("voice_minutes_exhausted");
+                    setVoiceNotice("You're out of voice minutes.");
+                } else if (response.status === 403) {
+                    setVoiceNotice(
+                        "Chat session expired. Please refresh and try again."
+                    );
+                } else if (response.status === 429) {
+                    setVoiceNotice("Message limit reached. Try again later.");
+                } else {
+                    setVoiceNotice(data.reason || data.error || "Could not generate reply. Please try again.");
+                }
+
                 return;
             }
 
-            setInput("");
-
-            const { data: savedUserMessage } = await supabase
-                .from("messages")
-                .insert({
-                    conversation_id: conversationId,
-                    sender_type: "user",
-                    text,
-                })
-                .select()
-                .single();
-
-            if (savedUserMessage) {
-                const isFirstUserMessage = !messages.some(
-                    (message) => message.sender_type === "user"
+            setMessages((prev) => {
+                const withoutOptimistic = prev.filter(
+                    (message) => message.id !== optimisticMessage.id
                 );
+                const nextMessages = data.userMessage
+                    ? [...withoutOptimistic, data.userMessage]
+                    : withoutOptimistic;
 
-                setMessages((prev) => [...prev, savedUserMessage]);
-                trackEvent({
-                    eventType: "message_sent",
-                    entityType: "creator",
-                    entityId: creator.id,
-                    sessionId: conversationId,
-                    metadata: {
-                        source: prefilledText ? "suggested_reply" : "typed",
-                        message_length: text.length,
-                    },
-                });
-
-                if (isFirstUserMessage) {
-                    trackEvent({
-                        eventType: "first_user_message",
-                        entityType: "creator",
-                        entityId: creator.id,
-                        sessionId: conversationId,
-                        metadata: {
-                            source: prefilledText ? "suggested_reply" : "typed",
-                            message_length: text.length,
-                        },
-                    });
+                if (
+                    data.aiMessage &&
+                    !nextMessages.some((message) => message.id === data.aiMessage.id)
+                ) {
+                    nextMessages.push(data.aiMessage);
                 }
+
+                return nextMessages;
+            });
+
+            if (typeof data.secondsRemaining === "number") {
+                setRemainingSeconds(data.secondsRemaining);
             }
+
+            setVoiceNotice(data.voiceNotice || null);
+
+            if (data.paywallReason) {
+                openPaywall(data.paywallReason);
+            }
+
+            if (data.aiMessage) {
+                playSoftPing();
+            }
+
+            inputRef.current?.focus();
         } catch (error) {
-            console.error("Failed to send message:", error);
+            console.error("Failed to generate AI reply:", error);
+            setMessages((prev) =>
+                prev.filter((message) => message.id !== optimisticMessage.id)
+            );
+            setInput(text);
+            setVoiceNotice("Could not generate reply. Please try again.");
+        } finally {
             sendingRef.current = false;
             setIsTyping(false);
-            return;
         }
-
-        setTimeout(async () => {
-            try {
-                buildCreatorSafetyPrompt();
-
-                const {
-                    data: { session: chatSession },
-                } = await supabase.auth.getSession();
-
-                const recentMessages = messages
-                    .slice(-8)
-                    .map((message) => ({
-                        role: message.sender_type === "user" ? "user" : "assistant",
-                        content: message.text,
-                    }));
-
-                const aiResponse = await fetch("/api/chat", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${chatSession?.access_token}`,
-                    },
-                    body: JSON.stringify({
-                        message: text,
-                        conversationId,
-                        recentMessages,
-                    }),
-                });
-
-                const aiData = await aiResponse.json();
-
-                if (!aiResponse.ok) {
-                    if (aiResponse.status === 401) {
-                        setVoiceNotice("Please log in again.");
-                    } else if (aiResponse.status === 403) {
-                        setVoiceNotice(
-                            "Chat session expired. Please refresh and try again."
-                        );
-                    } else if (aiResponse.status === 429) {
-                        setVoiceNotice("Message limit reached. Try again later.");
-                    } else {
-                        setVoiceNotice("Could not generate reply. Please try again.");
-                    }
-
-                    return;
-                }
-
-                const isFallback = aiData.fallback || false;
-                const aiText = aiData.reply || "Tell me more.";
-                const voiceText =
-                    aiText.length > 500
-                        ? `${aiText.slice(0, 500)}...`
-                        : aiText;
-
-                const {
-                    data: { session },
-                } = await supabase.auth.getSession();
-
-                const voiceResponse = await fetch("/api/voice", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${session?.access_token}`,
-                    },
-                    body: JSON.stringify({
-                        text: voiceText,
-                        conversationId,
-                    }),
-                });
-
-                const voiceData = await voiceResponse.json();
-                let audioUrl: string | null = null;
-                let voiceGenerated = false;
-                let voiceFallback = false;
-                let chargedSeconds: number | null = null;
-
-                if (voiceResponse.ok) {
-                    audioUrl = voiceData.audio
-                        ? `data:${voiceData.mimeType};base64,${voiceData.audio}`
-                        : voiceData.audioUrl || null;
-
-                    if (audioUrl) {
-                        voiceGenerated = voiceData.generated || false;
-                        voiceFallback = voiceData.fallback || false;
-                        chargedSeconds =
-                            typeof voiceData.chargedSeconds === "number"
-                                ? voiceData.chargedSeconds
-                                : null;
-                        setVoiceNotice(null);
-                    } else {
-                        voiceFallback = true;
-                        setVoiceNotice(
-                            "Text reply was created, but voice could not be generated."
-                        );
-                    }
-                } else {
-                    voiceFallback = true;
-
-                    if (voiceResponse.status === 402) {
-                        openPaywall("voice_minutes_exhausted");
-                        setVoiceNotice("You're out of voice minutes.");
-                    } else if (voiceResponse.status === 429) {
-                        setVoiceNotice("Voice limit reached. Try again later.");
-                    } else if (
-                        voiceResponse.status === 401 ||
-                        voiceResponse.status === 403
-                    ) {
-                        setVoiceNotice(
-                            "Could not generate voice. Please refresh and try again."
-                        );
-                    } else {
-                        setVoiceNotice(
-                            "Text reply was created, but voice could not be generated."
-                        );
-                    }
-                }
-
-                const { data: savedAiMessage } = await supabase
-                    .from("messages")
-                    .insert({
-                        conversation_id: conversationId,
-                        sender_type: "ai",
-                        text: aiText,
-                        audio_url: audioUrl,
-                        audio_duration_seconds: chargedSeconds,
-                        is_fallback: isFallback,
-                        voice_generated: voiceGenerated,
-                        voice_fallback: voiceFallback,
-                    })
-                    .select()
-                    .single();
-
-                if (typeof voiceData.secondsRemaining === "number") {
-                    setRemainingSeconds(voiceData.secondsRemaining);
-                }
-
-                if (savedAiMessage) {
-                    setMessages((prev) => [...prev, savedAiMessage]);
-                    trackEvent({
-                        eventType: "chat_completed",
-                        entityType: "creator",
-                        entityId: creator.id,
-                        sessionId: conversationId,
-                        metadata: {
-                            voice_generated: voiceGenerated,
-                            voice_fallback: voiceFallback,
-                            charged_seconds: chargedSeconds,
-                        },
-                    });
-                    playSoftPing();
-                }
-
-                inputRef.current?.focus();
-            } catch (error) {
-                console.error("Failed to generate AI reply:", error);
-            } finally {
-                sendingRef.current = false;
-                setIsTyping(false);
-            }
-        }, 900);
     }
 
     if (creatorUnavailable) {
@@ -855,7 +742,7 @@ export default function ChatPage({
                     >
                         <div
                             className={`max-w-[82%] rounded-3xl px-4 py-3 text-sm leading-relaxed ${message.sender_type === "user"
-                                ? "bg-white text-black rounded-br-md"
+                                ? "chat-message-user bg-white text-black rounded-br-md"
                                 : "bg-zinc-900 text-white rounded-bl-md border border-zinc-800"
                                 }`}
                         >
@@ -868,7 +755,7 @@ export default function ChatPage({
 
                                 <p
                                     className={`text-sm leading-relaxed ${message.sender_type === "user"
-                                        ? "text-black"
+                                        ? "chat-message-user-text text-black"
                                         : "text-zinc-300"
                                         }`}
                                 >
@@ -924,7 +811,7 @@ export default function ChatPage({
                             {message.created_at && (
                                 <p
                                     className={`text-[10px] mt-2 ${message.sender_type === "user"
-                                        ? "text-black/50"
+                                        ? "chat-message-user-time text-black/50"
                                         : "text-zinc-500"
                                         }`}
                                 >
