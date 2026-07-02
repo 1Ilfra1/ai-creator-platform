@@ -58,15 +58,19 @@ export async function POST(request: Request) {
     userId = user.id;
 
     const body = await request.json();
-    const message = String(body.message || "")
+    let message = String(body.message || "")
       .trim()
       .slice(0, MAX_MESSAGE_LENGTH);
     conversationId =
       typeof body.conversationId === "string"
         ? body.conversationId
         : null;
+    const userMessageId =
+      typeof body.userMessageId === "string"
+        ? body.userMessageId
+        : null;
 
-    if (!message) {
+    if (!message && !userMessageId) {
       return NextResponse.json(
         { error: "Message required" },
         { status: 400 }
@@ -76,21 +80,6 @@ export async function POST(request: Request) {
     if (!conversationId) {
       return NextResponse.json(
         { error: "Conversation required" },
-        { status: 400 }
-      );
-    }
-
-    const lowered = message.toLowerCase();
-    const blocked = blockedWords.some((word) =>
-      lowered.includes(word)
-    );
-
-    if (blocked) {
-      return NextResponse.json(
-        {
-          error: "Message blocked by safety rules.",
-          reason: "Message blocked by safety rules.",
-        },
         { status: 400 }
       );
     }
@@ -110,6 +99,67 @@ export async function POST(request: Request) {
     }
 
     creatorId = conversation.creator_id;
+
+    let savedUserMessage: any = null;
+
+    if (userMessageId) {
+      const { data: existingUserMessage } = await supabaseAdmin
+        .from("messages")
+        .select("*")
+        .eq("id", userMessageId)
+        .eq("conversation_id", conversationId)
+        .eq("sender_type", "user")
+        .single();
+
+      if (!existingUserMessage) {
+        return NextResponse.json(
+          { error: "User message not found" },
+          { status: 404 }
+        );
+      }
+
+      savedUserMessage = existingUserMessage;
+      message = String(existingUserMessage.text || "")
+        .trim()
+        .slice(0, MAX_MESSAGE_LENGTH);
+
+      const { data: existingAiMessage } = await supabaseAdmin
+        .from("messages")
+        .select("*")
+        .eq("conversation_id", conversationId)
+        .eq("sender_type", "ai")
+        .gt("created_at", existingUserMessage.created_at)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingAiMessage) {
+        return NextResponse.json({
+          userMessage: savedUserMessage,
+          aiMessage: existingAiMessage,
+          alreadyCompleted: true,
+          voiceNotice: null,
+          paywallReason: null,
+          secondsRemaining: null,
+        });
+      }
+    }
+
+    const lowered = message.toLowerCase();
+    const blocked = blockedWords.some((word) =>
+      lowered.includes(word)
+    );
+
+    if (blocked) {
+      return NextResponse.json(
+        {
+          error: "Message blocked by safety rules.",
+          reason: "Message blocked by safety rules.",
+          userMessage: savedUserMessage,
+        },
+        { status: 400 }
+      );
+    }
 
     const { data: profile } = await supabaseAdmin
       .from("profiles")
@@ -133,45 +183,40 @@ export async function POST(request: Request) {
       .eq("conversation_id", conversationId)
       .eq("sender_type", "user");
 
-    const { data: savedUserMessage, error: userMessageError } =
-      await supabaseAdmin
-        .from("messages")
-        .insert({
-          conversation_id: conversationId,
-          sender_type: "user",
-          text: message,
-        })
-        .select()
-        .single();
+    if (!savedUserMessage) {
+      const { data: insertedUserMessage, error: userMessageError } =
+        await supabaseAdmin
+          .from("messages")
+          .insert({
+            conversation_id: conversationId,
+            sender_type: "user",
+            text: message,
+          })
+          .select()
+          .single();
 
-    if (userMessageError || !savedUserMessage) {
-      console.error("Server chat user message save failed:", userMessageError);
+      if (userMessageError || !insertedUserMessage) {
+        console.error("Server chat user message save failed:", userMessageError);
 
-      return NextResponse.json(
-        { error: "Could not save message" },
-        { status: 500 }
-      );
+        return NextResponse.json(
+          { error: "Could not save message" },
+          { status: 500 }
+        );
+      }
+
+      savedUserMessage = insertedUserMessage;
     }
 
     const source =
       body.source === "suggested_reply" ? "suggested_reply" : "typed";
 
-    await trackServerEvent({
-      userId: user.id,
-      eventType: "message_sent",
-      entityType: "creator",
-      entityId: conversation.creator_id,
-      sessionId: conversationId,
-      metadata: {
-        source,
-        message_length: message.length,
-      },
-    });
+    const shouldTrackMessageEvents =
+      !userMessageId || body.trackMessageEvents === true;
 
-    if ((previousUserMessages || 0) === 0) {
+    if (shouldTrackMessageEvents) {
       await trackServerEvent({
         userId: user.id,
-        eventType: "first_user_message",
+        eventType: "message_sent",
         entityType: "creator",
         entityId: conversation.creator_id,
         sessionId: conversationId,
@@ -180,6 +225,20 @@ export async function POST(request: Request) {
           message_length: message.length,
         },
       });
+
+      if ((previousUserMessages || 0) <= 1) {
+        await trackServerEvent({
+          userId: user.id,
+          eventType: "first_user_message",
+          entityType: "creator",
+          entityId: conversation.creator_id,
+          sessionId: conversationId,
+          metadata: {
+            source,
+            message_length: message.length,
+          },
+        });
+      }
     }
 
     const origin = new URL(request.url).origin;
@@ -262,6 +321,30 @@ export async function POST(request: Request) {
       if (voiceResponse.status === 402) {
         paywallReason = "voice_minutes_exhausted";
       }
+    }
+
+    const { data: existingAiBeforeSave } = await supabaseAdmin
+      .from("messages")
+      .select("*")
+      .eq("conversation_id", conversationId)
+      .eq("sender_type", "ai")
+      .gt("created_at", savedUserMessage.created_at)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingAiBeforeSave) {
+      return NextResponse.json({
+        userMessage: savedUserMessage,
+        aiMessage: existingAiBeforeSave,
+        alreadyCompleted: true,
+        voiceNotice: null,
+        paywallReason: null,
+        secondsRemaining:
+          typeof voiceData.secondsRemaining === "number"
+            ? voiceData.secondsRemaining
+            : null,
+      });
     }
 
     const { data: savedAiMessage, error: aiMessageError } =

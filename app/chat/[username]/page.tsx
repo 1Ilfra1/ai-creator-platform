@@ -10,6 +10,7 @@ import { motion } from "framer-motion";
 
 interface Message {
     id: string;
+    conversation_id?: string;
     sender_type: "user" | "ai";
     text: string;
     audio_url?: string | null;
@@ -52,6 +53,7 @@ export default function ChatPage({
     const inputRef = useRef<HTMLInputElement | null>(null);
     const sendingRef = useRef(false);
     const greetingGenerationRef = useRef<string | null>(null);
+    const pendingReplyRef = useRef<string | null>(null);
 
     function openPaywall(reason: string) {
         setShowPaywall(true);
@@ -138,6 +140,24 @@ export default function ChatPage({
                         creatorData,
                         availableVoiceSeconds
                     );
+                } else {
+                    const lastMessage = loadedMessages[loadedMessages.length - 1];
+
+                    if (lastMessage?.sender_type === "user") {
+                        completeSavedUserMessage(lastMessage, {
+                            source: "recovery",
+                            recentMessages: loadedMessages
+                                .slice(0, -1)
+                                .slice(-8)
+                                .map((message) => ({
+                                    role:
+                                        message.sender_type === "user"
+                                            ? "user"
+                                            : "assistant",
+                                    content: message.text,
+                                })),
+                        });
+                    }
                 }
 
                 return;
@@ -188,6 +208,24 @@ export default function ChatPage({
                             creatorData,
                             availableVoiceSeconds
                         );
+                    } else {
+                        const lastMessage = loadedMessages[loadedMessages.length - 1];
+
+                        if (lastMessage?.sender_type === "user") {
+                            completeSavedUserMessage(lastMessage, {
+                                source: "recovery",
+                                recentMessages: loadedMessages
+                                    .slice(0, -1)
+                                    .slice(-8)
+                                    .map((message) => ({
+                                        role:
+                                            message.sender_type === "user"
+                                                ? "user"
+                                                : "assistant",
+                                        content: message.text,
+                                    })),
+                            });
+                        }
                     }
 
                     return;
@@ -403,6 +441,116 @@ export default function ChatPage({
         }
     }
 
+    async function completeSavedUserMessage(
+        savedUserMessage: Message,
+        options: {
+            source: "typed" | "suggested_reply" | "recovery";
+            recentMessages?: { role: string; content: string }[];
+            trackMessageEvents?: boolean;
+        }
+    ) {
+        const targetConversationId =
+            savedUserMessage.conversation_id || conversationId;
+
+        if (!targetConversationId) return;
+
+        if (pendingReplyRef.current === savedUserMessage.id) {
+            return;
+        }
+
+        pendingReplyRef.current = savedUserMessage.id;
+        setIsTyping(true);
+
+        try {
+            const {
+                data: { session },
+            } = await supabase.auth.getSession();
+
+            const response = await fetch("/api/chat/respond", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${session?.access_token}`,
+                },
+                body: JSON.stringify({
+                    conversationId: targetConversationId,
+                    userMessageId: savedUserMessage.id,
+                    recentMessages: options.recentMessages || [],
+                    source:
+                        options.source === "suggested_reply"
+                            ? "suggested_reply"
+                            : "typed",
+                    trackMessageEvents: options.trackMessageEvents === true,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                if (response.status === 401) {
+                    setVoiceNotice("Please log in again.");
+                } else if (response.status === 402) {
+                    openPaywall("voice_minutes_exhausted");
+                    setVoiceNotice("You're out of voice minutes.");
+                } else if (response.status === 403) {
+                    setVoiceNotice(
+                        "Chat session expired. Please refresh and try again."
+                    );
+                } else if (response.status === 429) {
+                    setVoiceNotice("Message limit reached. Try again later.");
+                } else {
+                    setVoiceNotice(
+                        data.reason ||
+                        data.error ||
+                        "Could not generate reply. Please try again."
+                    );
+                }
+
+                return;
+            }
+
+            setMessages((prev) => {
+                const nextMessages = prev.map((message) =>
+                    message.id === savedUserMessage.id && data.userMessage
+                        ? data.userMessage
+                        : message
+                );
+
+                if (
+                    data.aiMessage &&
+                    !nextMessages.some((message) => message.id === data.aiMessage.id)
+                ) {
+                    nextMessages.push(data.aiMessage);
+                }
+
+                return nextMessages;
+            });
+
+            if (typeof data.secondsRemaining === "number") {
+                setRemainingSeconds(data.secondsRemaining);
+            }
+
+            setVoiceNotice(data.voiceNotice || null);
+
+            if (data.paywallReason) {
+                openPaywall(data.paywallReason);
+            }
+
+            if (data.aiMessage && !data.alreadyCompleted) {
+                playSoftPing();
+            }
+
+            inputRef.current?.focus();
+        } catch (error) {
+            console.error("Failed to complete saved user message:", error);
+            setVoiceNotice("Could not generate reply. Please try again.");
+        } finally {
+            pendingReplyRef.current = null;
+            sendingRef.current = false;
+            setIsTyping(false);
+        }
+    }
+
     async function sendMessage(prefilledText?: string) {
         const messageText =
             typeof prefilledText === "string"
@@ -461,119 +609,64 @@ export default function ChatPage({
                 role: message.sender_type === "user" ? "user" : "assistant",
                 content: message.text,
             }));
-        const optimisticMessage: Message = {
-            id: `temp-${Date.now()}`,
-            conversation_id: conversationId,
-            sender_type: "user",
-            text,
-            created_at: new Date().toISOString(),
-            is_fallback: false,
-        } as Message;
-
-        setInput("");
-        setMessages((prev) => [...prev, optimisticMessage]);
-
         try {
             const {
-                data: { session },
+                data: { session: moderationSession },
             } = await supabase.auth.getSession();
 
-            const response = await fetch("/api/chat/respond", {
+            const moderationResponse = await fetch("/api/moderate", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${session?.access_token}`,
+                    Authorization: `Bearer ${moderationSession?.access_token}`,
                 },
-                body: JSON.stringify({
-                    message: text,
-                    conversationId,
-                    recentMessages,
-                    source: prefilledText ? "suggested_reply" : "typed",
-                }),
+                body: JSON.stringify({ text }),
             });
 
-            const data = await response.json();
+            const moderationData = await moderationResponse.json();
 
-            if (!response.ok) {
-                setMessages((prev) => {
-                    if (data.userMessage) {
-                        return prev.map((message) =>
-                            message.id === optimisticMessage.id
-                                ? data.userMessage
-                                : message
-                        );
-                    }
-
-                    return prev.filter(
-                        (message) => message.id !== optimisticMessage.id
-                    );
-                });
-
-                if (!data.userMessage) {
-                    setInput(text);
-                }
-
-                if (response.status === 401) {
-                    setVoiceNotice("Please log in again.");
-                } else if (response.status === 402) {
-                    openPaywall("voice_minutes_exhausted");
-                    setVoiceNotice("You're out of voice minutes.");
-                } else if (response.status === 403) {
-                    setVoiceNotice(
-                        "Chat session expired. Please refresh and try again."
-                    );
-                } else if (response.status === 429) {
-                    setVoiceNotice("Message limit reached. Try again later.");
-                } else {
-                    setVoiceNotice(data.reason || data.error || "Could not generate reply. Please try again.");
-                }
-
+            if (!moderationResponse.ok || !moderationData.allowed) {
+                alert(moderationData.reason || "Message blocked by safety rules.");
                 return;
             }
 
-            setMessages((prev) => {
-                const withoutOptimistic = prev.filter(
-                    (message) => message.id !== optimisticMessage.id
-                );
-                const nextMessages = data.userMessage
-                    ? [...withoutOptimistic, data.userMessage]
-                    : withoutOptimistic;
+            setInput("");
 
-                if (
-                    data.aiMessage &&
-                    !nextMessages.some((message) => message.id === data.aiMessage.id)
-                ) {
-                    nextMessages.push(data.aiMessage);
-                }
+            const { data: savedUserMessage, error: saveError } = await supabase
+                .from("messages")
+                .insert({
+                    conversation_id: conversationId,
+                    sender_type: "user",
+                    text,
+                })
+                .select()
+                .single();
 
-                return nextMessages;
+            if (saveError || !savedUserMessage) {
+                console.error("Failed to save user message:", saveError);
+                setInput(text);
+                setVoiceNotice("Could not send message. Please try again.");
+                return;
+            }
+
+            setMessages((prev) => [...prev, savedUserMessage]);
+
+            await completeSavedUserMessage(savedUserMessage, {
+                source: prefilledText ? "suggested_reply" : "typed",
+                recentMessages,
+                trackMessageEvents: true,
             });
-
-            if (typeof data.secondsRemaining === "number") {
-                setRemainingSeconds(data.secondsRemaining);
-            }
-
-            setVoiceNotice(data.voiceNotice || null);
-
-            if (data.paywallReason) {
-                openPaywall(data.paywallReason);
-            }
-
-            if (data.aiMessage) {
-                playSoftPing();
-            }
 
             inputRef.current?.focus();
         } catch (error) {
-            console.error("Failed to generate AI reply:", error);
-            setMessages((prev) =>
-                prev.filter((message) => message.id !== optimisticMessage.id)
-            );
+            console.error("Failed to send message:", error);
             setInput(text);
             setVoiceNotice("Could not generate reply. Please try again.");
         } finally {
-            sendingRef.current = false;
-            setIsTyping(false);
+            if (!pendingReplyRef.current) {
+                sendingRef.current = false;
+                setIsTyping(false);
+            }
         }
     }
 
