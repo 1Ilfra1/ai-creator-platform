@@ -8,6 +8,44 @@ import { trackEvent } from "@/services/analytics";
 import AudioPlayer from "@/components/audio/AudioPlayer";
 import { motion } from "framer-motion";
 
+const conversationStarters: Record<string, string[]> = {
+    arnold: [
+        "Let's practice English",
+        "Correct my mistakes",
+        "Give me a speaking challenge",
+    ],
+    emma: [
+        "Help me plan a workout",
+        "I need some motivation",
+        "How should I start?",
+    ],
+    maya: [
+        "Let's do a quick stretch",
+        "Help me relax",
+        "I'm new to yoga",
+    ],
+    alex: [
+        "Help me focus",
+        "Plan my day with me",
+        "I keep procrastinating",
+    ],
+    nora: [
+        "Where should I travel next?",
+        "Plan a weekend trip",
+        "Help me travel on a budget",
+    ],
+    amina: [
+        "What should I cook today?",
+        "I only have a few ingredients",
+        "Give me a quick recipe",
+    ],
+    ronald: [
+        "Help me clear my mind",
+        "Let's do a 5-minute meditation",
+        "I need to unwind",
+    ],
+};
+
 interface Message {
     id: string;
     conversation_id?: string;
@@ -793,15 +831,15 @@ export default function ChatPage({
                 {!hasUserMessages && (
                     <div className="text-center mt-20">
                         <p className="text-zinc-500 mb-5">
-                            Start a private conversation with {creator.display_name}.
+                            Start a conversation with {creator.display_name}.
                         </p>
 
                         <div className="flex flex-col gap-3 items-center">
-                            {[
-                                "Call me daddy 😏",
-                                "Say meow 🐱",
-                                "Tell me you missed me ❤️",
-                            ].map((reply) => (
+                            {(conversationStarters[creator.username] ?? [
+                                "Let's get started",
+                                "What can you help me with?",
+                                "Tell me something useful",
+                            ]).map((reply) => (
                                 <button
                                     key={reply}
                                     disabled={isWaitingForReply}
