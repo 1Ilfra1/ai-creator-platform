@@ -462,7 +462,7 @@ export default function DashboardPage() {
                 </h1>
 
                 <p className="text-zinc-500 mb-8">
-                    Set up your creator profile so fans can find you after approval.
+                    Set up your creator profile so users can discover and interact with your AI experience after approval.
                 </p>
 
                 <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden mb-8">
@@ -565,17 +565,17 @@ export default function DashboardPage() {
                             value={tagline}
                             onChange={(e) => setTagline(e.target.value)}
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 outline-none h-28 resize-none"
-                            placeholder="Voice notes, cozy chats, and meaningful conversations."
+                            placeholder="Fitness coach helping people build simple, sustainable workout routines."
                         />
                     </div>
 
                     <div>
                         <label className="block text-sm mb-2">
-                            Creator vibe & style
+                            Creator personality & style
                         </label>
 
                         <p className="text-xs text-zinc-500 mb-2">
-                            Shape how your AI presence talks: tone, catchphrases, fan nicknames, energy, and conversation style.
+                            Define how your AI communicates: expertise, tone, personality, vocabulary, and conversation style.
                         </p>
 
                         <p className="text-xs text-zinc-500 mb-2">
@@ -587,11 +587,11 @@ export default function DashboardPage() {
                             onChange={(e) => setPersonalityPrompt(e.target.value)}
                             className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 outline-none h-40 resize-none"
                             placeholder={`Example:
-                        I call my community “sloniki”.
-                        I speak warmly and casually.
-                        I like playful teasing and cozy conversations.
-                        I often say “stay cozy”.
-                        Make people feel comfortable and emotionally heard.`}
+                        I am a fitness coach focused on simple, practical advice.
+I speak in a friendly, energetic, and encouraging way.
+I keep explanations short and easy to follow.
+I ask about the user's goals before giving recommendations.
+I motivate users without sounding pushy.`}
                         />
                     </div>
 
@@ -678,7 +678,7 @@ export default function DashboardPage() {
                         </label>
 
                         <p className="text-xs text-zinc-500 mb-3">
-                            This optional preview is what fans can play on your public profile and creator cards.
+                            This optional voice preview can be played on your public profile and creator cards.
                             Keep it warm, short, and welcoming.
                         </p>
 
